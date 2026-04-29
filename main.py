@@ -35,12 +35,9 @@ def get_efficiency_bar(percent):
 
 def calculate_wearing_efficiency(minutes):
     """
-    Ефективність зростає перші 30 хв до 100%, 
-    тримається до 120 хв, потім падає.
+    Ефективність максимальна (100%) до 120 хв, потім падає.
     """
-    if minutes <= 30:
-        return int(50 + (minutes / 30) * 50)
-    elif minutes <= 120:
+    if minutes <= 120:
         return 100
     else:
         # Падає на 1% кожні 5 хвилин після 2 годин
