@@ -57,7 +57,7 @@ test('webhook: режим налаштування показує id на /start
   assert.equal(sent[0].body.reply_markup, undefined);
 });
 
-test('webhook: власниці — привітання з кнопкою Mini App, чужим — тиша', async () => {
+test('webhook: власниці — привітання з кнопкою Mini App, чужим — лише їхній id на /start', async () => {
   const env = makeEnv(); sent = [];
   await worker.fetch(post('/webhook', msg(OWNER, '/start'), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
   assert.equal(sent.length, 1);
@@ -72,7 +72,19 @@ test('webhook: власниці — привітання з кнопкою Mini 
   assert.equal(sent[0].body.reply_markup.inline_keyboard[0][0].web_app.url, 'https://app.test/');
   sent = [];
   await worker.fetch(post('/webhook', msg(999, '/start'), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, `https://tg.test/bot${TOKEN}/sendMessage`);
+  assert.match(sent[0].body.text, /id: 999$/);
+  assert.equal(sent[0].body.reply_markup, undefined);
+  sent = [];
+  await worker.fetch(post('/webhook', msg(999, 'привіт'), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
   assert.equal(sent.length, 0);
+});
+
+test('webhook: кілька користувачів через кому — кожному привітання з кнопкою', async () => {
+  const env = makeEnv({ ALLOWED_USER_ID: `${OWNER}, 888002` }); sent = [];
+  for (const id of [OWNER, 888002]) await worker.fetch(post('/webhook', msg(id, '/start'), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
+  assert.deepEqual(sent.map(x => [x.url.split('/').pop(), x.body.chat_id]), [['sendAnimation', OWNER], ['sendAnimation', 888002]]);
 });
 
 test('webhook: якщо анімація не надіслалась — привітання текстом', async () => {
@@ -92,7 +104,7 @@ test('activity: власниця з валідним initData — записує
   const env = makeEnv();
   const r = await worker.fetch(post('/api/activity', { initData: initFor(OWNER), streak: 4 }), env);
   assert.equal(r.status, 200);
-  const a = JSON.parse(env.store.get('activity'));
+  const a = JSON.parse(env.store.get('activity:' + OWNER));
   assert.equal(a.streak, 4);
   assert.equal(a.day, kyivNow(new Date()).date);
   assert.equal((await worker.fetch(post('/api/activity', { initData: initFor(999), streak: 1 }), env)).status, 403);
@@ -129,7 +141,7 @@ test('cron: о 19:00 за Києвом узимку і влітку, один р
   for (const [at19, at18] of [['2026-01-15T17:00:00Z', '2026-01-15T16:00:00Z'], ['2026-07-15T16:00:00Z', '2026-07-15T15:00:00Z']]) {
     const day = at19.slice(0, 10);
     const env = makeEnv(); env.store.set('origin', 'https://app.test/');
-    env.store.set('activity', JSON.stringify({ day: prevDay(day), streak: 5 }));
+    env.store.set('activity:' + OWNER, JSON.stringify({ day: prevDay(day), streak: 5 }));
     sent = []; await cron(env, at18); assert.equal(sent.length, 0, '18:00 — ще рано');
     await cron(env, at19); assert.equal(sent.length, 1, '19:00 — нагадування');
     assert.equal(sent[0].body.text, 'Серія 5 днів під загрозою. 10 хвилин на ПДР?');
@@ -137,7 +149,7 @@ test('cron: о 19:00 за Києвом узимку і влітку, один р
     assert.equal(sent[0].body.reply_markup.inline_keyboard[0][0].web_app.url, 'https://app.test/');
     await cron(env, new Date(Date.parse(at19) + 3600e3).toISOString()); assert.equal(sent.length, 1, 'вдруге того ж дня не шле');
   }
-  const env = makeEnv(); env.store.set('activity', JSON.stringify({ day: '2026-07-15', streak: 2 }));
+  const env = makeEnv(); env.store.set('activity:' + OWNER, JSON.stringify({ day: '2026-07-15', streak: 2 }));
   sent = []; await cron(env, '2026-07-15T16:00:00Z'); assert.equal(sent.length, 0, 'сьогодні вже займалась');
 });
 
@@ -146,9 +158,34 @@ test('cron: якщо о 19:00 не вдалося надіслати — про�
   const realFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ ok: false }));
   await cron(env, '2026-07-15T16:00:00Z');
-  assert.equal(env.store.get('reminded'), undefined);
+  assert.equal(env.store.get('reminded:' + OWNER), undefined);
   globalThis.fetch = realFetch; sent = [];
   await cron(env, '2026-07-15T17:00:00Z');
   assert.equal(sent.length, 1);
-  assert.equal(env.store.get('reminded'), '2026-07-15');
+  assert.equal(env.store.get('reminded:' + OWNER), '2026-07-15');
+});
+
+test('кілька користувачів: активність і нагадування в кожного свої', async () => {
+  const env = makeEnv({ ALLOWED_USER_ID: `${OWNER},888002` });
+  const r = await worker.fetch(post('/api/activity', { initData: initFor(888002), streak: 2 }), env);
+  assert.equal(r.status, 200);
+  assert.equal(JSON.parse(env.store.get('activity:888002')).streak, 2);
+  assert.equal((await worker.fetch(post('/api/activity', { initData: initFor(999), streak: 1 }), env)).status, 403);
+  // 888002 сьогодні займався, власниця — ні: нагадування лише їй, і один раз
+  env.store.set('activity:888002', JSON.stringify({ day: '2026-07-15', streak: 2 }));
+  sent = []; await cron(env, '2026-07-15T16:00:00Z');
+  assert.deepEqual(sent.map(x => x.body.chat_id), [String(OWNER)]);
+  await cron(env, '2026-07-15T17:00:00Z');
+  assert.equal(sent.length, 1);
+});
+
+test('ключі з часів однієї користувачки читаються для першого id', async () => {
+  const env = makeEnv({ ALLOWED_USER_ID: `${OWNER},888002` });
+  env.store.set('activity', JSON.stringify({ day: '2026-07-14', streak: 7 }));
+  env.store.set('reminded', '2026-07-15');
+  sent = []; await cron(env, '2026-07-15T16:00:00Z');
+  assert.deepEqual(sent.map(x => x.body.chat_id), ['888002'], 'власниці сьогодні вже нагадували');
+  env.store.delete('reminded');
+  sent = []; await cron(env, '2026-07-15T17:00:00Z');
+  assert.deepEqual(sent.map(x => [x.body.chat_id, x.body.text]), [[String(OWNER), 'Серія 7 днів під загрозою. 10 хвилин на ПДР?']]);
 });

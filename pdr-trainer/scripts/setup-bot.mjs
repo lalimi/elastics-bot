@@ -1,6 +1,6 @@
 // Налаштування бота через Bot API: webhook із secret_token, кнопка меню «Тренажер», команда /start.
 // Усі значення беруться зі змінних середовища, у файли нічого не пишеться:
-//   BOT_TOKEN, WEBHOOK_SECRET, APP_URL (https://…workers.dev/), ALLOWED_USER_ID (необов'язково)
+//   BOT_TOKEN, WEBHOOK_SECRET, APP_URL (https://…workers.dev/), ALLOWED_USER_ID (необов'язково; кілька id — через кому)
 const { BOT_TOKEN, WEBHOOK_SECRET, ALLOWED_USER_ID } = process.env;
 let APP_URL = process.env.APP_URL || '';
 if (!BOT_TOKEN || !WEBHOOK_SECRET || !APP_URL) {
@@ -32,7 +32,8 @@ await call('setMyCommands', { commands: [{ command: 'start', description: 'Ві�
 await call('setMyDescription', { description: '«Зелена хвиля» — особистий тренажер ПДР України: 850 питань за чинними правилами, пробний іспит на 20 хвилин, анімовані схеми до питань, гра на перехрестях і нагадування щовечора.' });
 await call('setMyShortDescription', { short_description: 'Тренажер ПДР: 850 питань, пробний іспит і анімовані схеми 🚦' });
 const menu = { type: 'web_app', text: 'Тренажер', web_app: { url: APP_URL } };
-if (ALLOWED_USER_ID) await call('setChatMenuButton', { chat_id: Number(ALLOWED_USER_ID), menu_button: menu });
+const ids = String(ALLOWED_USER_ID || '').split(/[\s,]+/).filter(Boolean);
+if (ids.length) for (const id of ids) await call('setChatMenuButton', { chat_id: Number(id), menu_button: menu });
 else console.log('setChatMenuButton: пропущено — спершу задай ALLOWED_USER_ID (id прийде на /start)');
 const info = await call('getWebhookInfo');
 if (info.ok) console.log(`  webhook: ${info.result.url}, очікує оновлень: ${info.result.pending_update_count}${info.result.last_error_message ? ', остання помилка: ' + info.result.last_error_message : ''}`);

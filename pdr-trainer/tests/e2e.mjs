@@ -385,7 +385,7 @@ test('Telegram: CloudStorage — ліміти, запис лише змінен�
   const writes = cloud.calls.slice(before).filter(c => c.startsWith('saveStorageValue'));
   assert.deepEqual(writes.sort(), [...new Set(['saveStorageValue:zh_meta', 'saveStorageValue:zh_q_' + sec2])].sort());
   // запит активності дійшов до Worker і записав серію
-  const act = JSON.parse(kv.get('activity'));
+  const act = JSON.parse(kv.get('activity:' + OWNER));
   assert.equal(act.streak, 1);
   assert.equal(await a.page.evaluate(() => localStorage.getItem('zh-ping')), await a.page.evaluate(() => todayStr()));
 
