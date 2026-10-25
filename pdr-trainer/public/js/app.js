@@ -19,40 +19,61 @@ function normalize(o){
 let S=defaults();
 try{const raw=localStorage.getItem(LS_KEY); if(raw) S=normalize(JSON.parse(raw));}catch(e){}
 
-let dbRef=null, saveTimer=null, saving=false, dirty=false, userName='';
+const userName=TG.firstName;
+const secOf=id=>QMAP[id]&&QMAP[id].s;
+let saveTimer=null, saving=false, dirty=false, cloudLast=null, cloudFails=0;
 function save(){
   S.updatedAt=Date.now();
   try{localStorage.setItem(LS_KEY,JSON.stringify(S));}catch(e){}
-  dirty=true; clearTimeout(saveTimer); saveTimer=setTimeout(flush,1200);
+  dirty=true; clearTimeout(saveTimer); saveTimer=setTimeout(flush,1500);
 }
+// пише в CloudStorage лише ключі, що змінились; zh_meta — останнім
 async function flush(){
-  if(!dbRef||saving||!dirty) return;
+  if(!TG.cloud||!cloudLast||saving||!dirty) return;
   saving=true; dirty=false;
-  try{ await dbRef.set(JSON.parse(JSON.stringify(S))); }
-  catch(e){ const c=e&&e.code; if(c==='unavailable'||c==='resource_exhausted'){dirty=true;} else {dbRef=null;} }
-  saving=false;
-  if(dirty&&dbRef){ clearTimeout(saveTimer); saveTimer=setTimeout(flush,3000); }
-}
-async function initCloud(){
+  const packed=csPack(S,secOf);
   try{
-    if(!window.claude||typeof window.claude.use!=='function') return;
-    const [db,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
-    if(user){ try{ const me=await user.me(); if(me&&me.name){ userName=me.name.trim().split(/\s+/)[0]; if(view==='home') render(); } }catch(e){} }
-    if(!db||!user) return;
-    const id=await user.id(); if(!id) return;
-    const ref=db.doc('data/users/'+id+'/progress');
-    const snap=await ref.get();
-    if(snap.exists){
-      const remote=normalize(JSON.parse(JSON.stringify(snap.data()||{})));
-      if((remote.updatedAt||0)>(S.updatedAt||0)){
-        S=remote; try{localStorage.setItem(LS_KEY,JSON.stringify(S));}catch(e){}
-        if(view==='home'||view==='topics'||view==='ach') render();
-      } else if((S.updatedAt||0)>(remote.updatedAt||0)) dirty=true;
-    } else if(S.updatedAt) dirty=true;
-    dbRef=ref; flush();
-  }catch(e){}
+    for(const k of Object.keys(packed)){ if(k!==CS_META&&packed[k]!==cloudLast[k]){ await TG.cloud.setItem(k,packed[k]); cloudLast[k]=packed[k]; } }
+    if(packed[CS_META]!==cloudLast[CS_META]){ await TG.cloud.setItem(CS_META,packed[CS_META]); cloudLast[CS_META]=packed[CS_META]; }
+    const gone=Object.keys(cloudLast).filter(k=>!(k in packed));
+    if(gone.length){ await TG.cloud.removeItems(gone); gone.forEach(k=>delete cloudLast[k]); }
+    cloudFails=0;
+  }catch(e){ dirty=true; cloudFails++; }
+  saving=false;
+  if(dirty){ clearTimeout(saveTimer); saveTimer=setTimeout(flush,cloudFails?Math.min(60000,3000*cloudFails):1500); }
+}
+// читає прогрес з CloudStorage і зливає з локальним за updatedAt
+async function initCloud(){
+  if(!TG.cloud) return;
+  let remote=null; const got={};
+  try{
+    const meta=await TG.cloud.getItem(CS_META);
+    if(meta){
+      const keys=JSON.parse(meta).keys||[];
+      Object.assign(got,keys.length?await TG.cloud.getItems(keys):{}); got[CS_META]=meta;
+      try{ remote=normalize(csUnpack(k=>got[k])); }catch(e){ remote=null; }
+    }
+  }catch(e){ setTimeout(initCloud,10000); return; } // хмара недоступна — пробуємо пізніше, локальне не затираємо
+  cloudLast={}; Object.keys(got).forEach(k=>{ if(got[k]) cloudLast[k]=got[k]; });
+  if(remote&&(remote.updatedAt||0)>(S.updatedAt||0)){
+    S=remote; try{localStorage.setItem(LS_KEY,JSON.stringify(S));}catch(e){}
+    if(view==='home'||view==='topics'||view==='ach') render();
+  } else if(!remote||(S.updatedAt||0)>(remote.updatedAt||0)) dirty=true;
+  flush();
 }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') flush(); });
+
+// раз на день після першої відповіді повідомляє боту про активність (для нагадувань)
+let pinging=false;
+function pingActivity(){
+  if(!TG.inTg||pinging) return;
+  const t=todayStr(); try{ if(localStorage.getItem('zh-ping')===t) return; }catch(e){}
+  pinging=true;
+  fetch('api/activity',{method:'POST',headers:{'Content-Type':'application/json'},keepalive:true,
+    body:JSON.stringify({initData:TG.initData,streak:displayStreak(),day:t})})
+    .then(r=>{ if(r.ok) try{localStorage.setItem('zh-ping',t);}catch(e){} })
+    .catch(()=>{}).finally(()=>{ pinging=false; });
+}
 
 /* ---------- утиліти ---------- */
 const reduced=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -84,7 +105,8 @@ function sfx(kind){
     seq.forEach(([f,d,len])=>{const o=AC.createOscillator(),g=AC.createGain();o.type=kind==='bad'?'square':'triangle';o.frequency.value=f;g.gain.setValueAtTime(0.0001,t+d);g.gain.exponentialRampToValueAtTime(kind==='bad'?0.05:0.13,t+d+0.012);g.gain.exponentialRampToValueAtTime(0.0001,t+d+len);o.connect(g);g.connect(AC.destination);o.start(t+d);o.stop(t+d+len+0.03);});
   }catch(e){}
 }
-function buzz(){try{navigator.vibrate&&navigator.vibrate(70);}catch(e){}}
+// вібрація: у Telegram — HapticFeedback (navigator.vibrate на iPhone не працює), поза ним — як було
+function buzz(){ if(TG.haptic('error')) return; try{navigator.vibrate&&navigator.vibrate(70);}catch(e){} }
 
 /* ---------- іконки ---------- */
 const ICON={
@@ -117,13 +139,54 @@ function signIcon(ic){
     case 'redo':return `<svg ${W}><circle cx="20" cy="20" r="18" fill="#C23131"/><path d="M27 15a8 8 0 10.8 8" stroke="#fff" stroke-width="2.8" fill="none" stroke-linecap="round"/><path d="M28 9v6h-6" stroke="#fff" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     case 'fav':return `<svg ${W}><circle cx="20" cy="20" r="18" fill="#F2B705"/><path d="M20 9.5l3 6.3 6.9.9-5 4.7 1.3 6.8L20 25l-6.2 3.2 1.3-6.8-5-4.7 6.9-.9z" fill="#fff"/></svg>`;
     case 'bolt':return `<svg ${W}><circle cx="20" cy="20" r="18" fill="#1D5DBF"/><path d="M22 7l-9 15h6l-2 11 9-15h-6z" fill="#fff"/></svg>`;
+    case 'motorway':return `<svg ${W}><rect x="2" y="2" width="36" height="36" rx="7" fill="#137A47"/><rect x="5" y="5" width="30" height="30" rx="4.5" fill="none" stroke="#fff" stroke-width="1.6"/><path d="M13 32l4-18M27 32l-4-18M9 19h22" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>`;
+    case 'truck':return `<svg ${W}><rect x="2" y="2" width="36" height="36" rx="7" fill="#1D5DBF"/><rect x="7" y="13" width="17" height="12" rx="1.5" fill="#fff"/><path d="M25 17h5l3.5 4.5V25H25z" fill="#fff"/><circle cx="12" cy="28" r="3" fill="#fff" stroke="#1D5DBF" stroke-width="1.4"/><circle cx="29" cy="28" r="3" fill="#fff" stroke="#1D5DBF" stroke-width="1.4"/></svg>`;
+    case 'tire':return `<svg ${W}><rect x="2" y="2" width="36" height="36" rx="7" fill="#454A52"/><circle cx="20" cy="20" r="11.5" fill="none" stroke="#fff" stroke-width="5"/><circle cx="20" cy="20" r="3.2" fill="#fff"/><path d="M20 4.5v4M20 31.5v4M4.5 20h4M31.5 20h4" stroke="#454A52" stroke-width="2.4"/></svg>`;
+    case 'bike':return `<svg ${W}><circle cx="20" cy="20" r="18" fill="#1D5DBF"/><g fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="24" r="5"/><circle cx="28" cy="24" r="5"/><path d="M12 24l5-9h8l3 9M17 15l3 9h-8M21 12h4"/></g></svg>`;
   }
   return '';
 }
 function signSvg(k){
   const W='width="128" height="128" viewBox="0 0 100 100" role="img"';
-  const R='#D7262E',B='#1D5DBF',Y='#F2B705';
+  const R='#D7262E',B='#1D5DBF',Y='#F2B705',K='#1D2128';
+  // заготовки: заборонний круг, наказовий круг, попереджувальний трикутник, інформаційний квадрат
+  const PRO=(lbl,inner)=>`<svg ${W} aria-label="Знак: ${lbl}"><circle cx="50" cy="50" r="42" fill="#fff" stroke="${R}" stroke-width="10"/>${inner}</svg>`;
+  const MAN=(lbl,inner)=>`<svg ${W} aria-label="Знак: ${lbl}"><circle cx="50" cy="50" r="46" fill="${B}"/><g fill="none" stroke="#fff" stroke-width="10" stroke-linejoin="round">${inner}</g></svg>`;
+  const TRI=(lbl,inner)=>`<svg ${W} aria-label="Знак: ${lbl}"><path d="M50 9L93 85H7Z" fill="#fff" stroke="${R}" stroke-width="8" stroke-linejoin="round"/>${inner}</svg>`;
+  const INF=(lbl,inner)=>`<svg ${W} aria-label="Знак: ${lbl}"><rect x="8" y="8" width="84" height="84" rx="8" fill="${B}"/><rect x="12" y="12" width="76" height="76" rx="5" fill="none" stroke="#fff" stroke-width="2"/>${inner}</svg>`;
+  const END=(lbl,id,inner)=>`<svg ${W} aria-label="Знак: ${lbl}"><defs><clipPath id="${id}"><circle cx="50" cy="50" r="45"/></clipPath></defs><circle cx="50" cy="50" r="46" fill="#fff" stroke="#2A2A2A" stroke-width="1.5"/>${inner}<g clip-path="url(#${id})" stroke="#2A2A2A" stroke-width="2.4">${[-14,-7,0,7,14].map(o=>`<line x1="${50+o+45}" y1="${50+o-45}" x2="${50+o-45}" y2="${50+o+45}"/>`).join('')}</g></svg>`;
+  const SLASH=`<path d="M21 21L79 79" stroke="${R}" stroke-width="9"/>`;
+  const HEAD={u:(x,y)=>`${x},${y} ${x+13},${y+16} ${x-13},${y+16}`,d:(x,y)=>`${x},${y} ${x-13},${y-16} ${x+13},${y-16}`,r:(x,y)=>`${x},${y} ${x-16},${y-13} ${x-16},${y+13}`,l:(x,y)=>`${x},${y} ${x+16},${y-13} ${x+16},${y+13}`,dr:(x,y)=>`${x},${y} ${x-2.1},${y-20.5} ${x-20.5},${y-2.1}`,dl:(x,y)=>`${x},${y} ${x+2.1},${y-20.5} ${x+20.5},${y-2.1}`};
+  const head=(dir,x,y,c)=>`<polygon points="${HEAD[dir](x,y)}" fill="${c}" stroke="none"/>`;
+  const num=(n,c)=>`<text x="50" y="${n>=100?61:63}" text-anchor="middle" font-family="Fira Sans,sans-serif" font-weight="700" font-size="${n>=100?30:n<10?44:38}" fill="${c}">${n}</text>`;
+  const car=(cx,c)=>`<g fill="${c}"><path d="M${cx-11} 52L${cx-8} 41H${cx+8}L${cx+11} 52Z"/><rect x="${cx-13}" y="51" width="26" height="12" rx="3"/><rect x="${cx-11}" y="62" width="6" height="6" rx="1.5"/><rect x="${cx+5}" y="62" width="6" height="6" rx="1.5"/></g>`;
+  const cross=`<g fill="#fff" stroke="${R}" stroke-width="6"><rect x="42" y="2" width="16" height="96" transform="rotate(40 50 50)"/><rect x="42" y="2" width="16" height="96" transform="rotate(-40 50 50)"/></g><g fill="#fff"><rect x="42" y="2" width="16" height="96" transform="rotate(40 50 50)"/><rect x="42" y="2" width="16" height="96" transform="rotate(-40 50 50)"/></g>`;
+  let m=/^(end)?speed(\d+)$/.exec(k);
+  if(m) return m[1]
+    ? END(`біле коло з сірим числом ${m[2]}, перекреслене чорними лініями`,'cl-es',num(+m[2],'#8A8F96'))
+    : PRO(`біле коло з червоною облямівкою і числом ${m[2]}`,num(+m[2],K));
   switch(k){
+    case 'endall':return END('біле коло, перекреслене чорними діагональними лініями','cl-ea','');
+    case 'noovertake':return PRO('біле коло з червоною облямівкою, червоне і чорне авто поруч',car(37,R)+car(63,K));
+    case 'endnoovertake':return END('біле коло з сірими авто, перекреслене чорними лініями','cl-eo',car(37,'#8A8F96')+car(63,'#8A8F96'));
+    case 'noright':return PRO('біле коло з червоною облямівкою, чорна стрілка праворуч, перекреслена червоною смугою',`<path d="M42 80V52Q42 40 54 40H58" fill="none" stroke="${K}" stroke-width="9"/>${head('r',74,40,K)}${SLASH}`);
+    case 'noleft':return PRO('біле коло з червоною облямівкою, чорна стрілка ліворуч, перекреслена червоною смугою',`<path d="M58 80V52Q58 40 46 40H42" fill="none" stroke="${K}" stroke-width="9"/>${head('l',26,40,K)}${SLASH}`);
+    case 'nouturn':return PRO('біле коло з червоною облямівкою, чорна стрілка розвороту, перекреслена червоною смугою',`<path d="M60 80V46A13 13 0 0 0 34 46V58" fill="none" stroke="${K}" stroke-width="9"/>${head('d',34,74,K)}${SLASH}`);
+    case 'right':return MAN('синє коло з білою стрілкою, що повертає праворуч',`<path d="M42 84V54Q42 40 56 40H62"/>${head('r',78,40,'#fff')}`);
+    case 'left':return MAN('синє коло з білою стрілкою, що повертає ліворуч',`<path d="M58 84V54Q58 40 44 40H38"/>${head('l',22,40,'#fff')}`);
+    case 'straightright':return MAN('синє коло з білими стрілками прямо і праворуч',`<path d="M44 84V34M44 68Q44 54 58 54H62"/>${head('u',44,18,'#fff')}${head('r',78,54,'#fff')}`);
+    case 'straightleft':return MAN('синє коло з білими стрілками прямо і ліворуч',`<path d="M56 84V34M56 68Q56 54 42 54H38"/>${head('u',56,18,'#fff')}${head('l',22,54,'#fff')}`);
+    case 'rightleft':return MAN('синє коло з білими стрілками праворуч і ліворуч',`<path d="M50 84V60Q50 46 62 46H64M50 60Q50 46 38 46H36"/>${head('r',80,46,'#fff')}${head('l',20,46,'#fff')}`);
+    case 'keepright':return MAN('синє коло з білою стрілкою навскіс униз праворуч',`<path d="M30 30L61 61"/>${head('dr',72,72,'#fff')}`);
+    case 'keepleft':return MAN('синє коло з білою стрілкою навскіс униз ліворуч',`<path d="M70 30L39 61"/>${head('dl',28,72,'#fff')}`);
+    case 'oneway':return INF('синій квадрат з білою стрілкою вгору','<path d="M50 20L68 42H57V82H43V42H32Z" fill="#fff"/>');
+    case 'endoneway':return INF('синій квадрат з білою стрілкою вгору, перекреслений червоною смугою',`<path d="M50 20L68 42H57V82H43V42H32Z" fill="#fff"/><path d="M82 18L18 82" stroke="${R}" stroke-width="7"/>`);
+    case 'parking':return INF('синій квадрат з білою літерою P','<text x="50" y="72" text-anchor="middle" font-family="Fira Sans,sans-serif" font-weight="700" font-size="62" fill="#fff">P</text>');
+    case 'danger':return TRI('трикутник з червоною облямівкою і знаком оклику',`<rect x="45.5" y="36" width="9" height="28" rx="2" fill="${K}"/><circle cx="50" cy="73" r="5" fill="${K}"/>`);
+    case 'crossroads':return TRI('трикутник з червоною облямівкою і чорним косим хрестом',`<path d="M37 45L63 77M63 45L37 77" stroke="${K}" stroke-width="7"/>`);
+    case 'trafficlight':return TRI('трикутник з червоною облямівкою і світлофором',`<rect x="41" y="34" width="18" height="45" rx="5" fill="${K}"/><circle cx="50" cy="43" r="4.6" fill="#E0303A"/><circle cx="50" cy="56.5" r="4.6" fill="${Y}"/><circle cx="50" cy="70" r="4.6" fill="#2BD46F"/>`);
+    case 'rail1':return `<svg ${W} aria-label="Знак: білий косий хрест з червоною облямівкою">${cross}</svg>`;
+    case 'railmulti':return `<svg ${W} aria-label="Знак: білий косий хрест з червоною облямівкою і додатковою галочкою знизу"><g transform="translate(11 0) scale(.78)">${cross}</g><path d="M33 97L50 82L67 97" fill="none" stroke="${R}" stroke-width="13" stroke-linejoin="miter"/><path d="M33 97L50 82L67 97" fill="none" stroke="#fff" stroke-width="7" stroke-linejoin="miter"/></svg>`;
     case 'giveway':return `<svg ${W} aria-label="Знак: трикутник вершиною вниз з червоною облямівкою"><polygon points="50,90 7,15 93,15" fill="#fff" stroke="${R}" stroke-width="9" stroke-linejoin="round"/></svg>`;
     case 'stop':return `<svg ${W} aria-label="Знак: червоний восьмикутник з написом STOP"><polygon points="32.4,4 67.6,4 96,32.4 96,67.6 67.6,96 32.4,96 4,67.6 4,32.4" fill="${R}" stroke="#fff" stroke-width="3"/><polygon points="34,9 66,9 91,34 91,66 66,91 34,91 9,66 9,34" fill="none" stroke="#fff" stroke-width="2"/><text x="50" y="59" text-anchor="middle" font-family="Fira Sans,sans-serif" font-weight="700" font-size="25" fill="#fff">STOP</text></svg>`;
     case 'main':return `<svg ${W} aria-label="Знак: жовтий ромб у білій рамці"><polygon points="50,3 97,50 50,97 3,50" fill="#fff" stroke="#2A2A2A" stroke-width="1.5"/><polygon points="50,19 81,50 50,81 19,50" fill="${Y}" stroke="#2A2A2A" stroke-width="1.2"/></svg>`;
@@ -182,6 +245,17 @@ function render(){
   const V={home:vHome,examIntro:vExamIntro,topics:vTopics,quiz:vQuiz,result:vResult,ach:vAch,game:vGame}[view]||vHome;
   app.innerHTML=V();
   if(view==='game') afterGameRender();
+  syncTg();
+}
+// кнопка «назад», підтвердження закриття і свайпи Telegram відповідно до екрана
+function syncTg(){
+  TG.back(view==='home'?null:tgBack);
+  TG.closingConfirm(view==='quiz'&&!!Z&&Z.mode==='exam');
+  TG.verticalSwipes(view!=='game');
+}
+function tgBack(){
+  const sheet=document.querySelector('.backdrop'); if(sheet){ sheet.remove(); return; } // як «Скасувати»
+  if(view==='quiz') ACT.quitQuiz(); else go('home');
 }
 
 /* ---------- головна ---------- */
@@ -287,10 +361,10 @@ function answer(k){
   const qq=Z.list[Z.i]; if(k<0||k>=qq.o.length) return;
   Z.picked=k; const ok=Z.order[k]===0;
   recordAnswer(qq.id,ok);
-  if(ok){ Z.combo++; Z.correct++; const gain=10+Math.min(10,(Z.combo-1)*2); S.xp+=gain; Z.xp+=gain; S.bestCombo=Math.max(S.bestCombo,Z.combo); sfx('ok'); xpFloat('+'+gain+' XP'); }
+  if(ok){ Z.combo++; Z.correct++; const gain=10+Math.min(10,(Z.combo-1)*2); S.xp+=gain; Z.xp+=gain; S.bestCombo=Math.max(S.bestCombo,Z.combo); sfx('ok'); TG.haptic('success'); xpFloat('+'+gain+' XP'); }
   else { Z.combo=0; Z.mistakes++; Z.wrong.push({q:qq,picked:qq.o[Z.order[k]]}); sfx('bad'); buzz(); }
   if(Z.mode==='marathon') S.marathon=(Z.i+1>=QB.length)?0:Z.i+1;
-  save(); checkBadges(); render();
+  save(); checkBadges(); render(); pingActivity();
   const nb=document.getElementById('nextBtn');
   if(nb){ nb.scrollIntoView({behavior:reduced?'auto':'smooth',block:'nearest'}); }
 }
@@ -483,7 +557,7 @@ function tapCar(i){
   const sc=G.sc;
   const blockers=[...sc.deps[i]].filter(j=>!G.gone.has(j));
   if(!blockers.length){
-    G.gone.add(i); G.anim++; sfx('ok');
+    G.gone.add(i); G.anim++; sfx('ok'); TG.haptic('success');
     const g=document.getElementById('car'+i); if(g) g.classList.remove('blocker');
     const myG=G;
     driveCar(i,()=>{ if(!myG.alive) return; myG.anim--; if(myG.gone.size===sc.cars.length&&myG.anim===0&&!myG.busy) cleared(); });
@@ -605,7 +679,9 @@ const ACT={
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]'); if(!el) return;
   if(el.closest('.backdrop')) return;
-  const f=ACT[el.dataset.act]; if(f) f(el.dataset.arg,el);
+  const f=ACT[el.dataset.act]; if(!f) return;
+  if(el.dataset.act!=='ans'&&el.dataset.act!=='car') TG.haptic('light');
+  f(el.dataset.arg,el);
 });
 document.addEventListener('keydown',e=>{
   if(document.querySelector('.backdrop')) return;
@@ -615,6 +691,10 @@ document.addEventListener('keydown',e=>{
   }
 });
 
+TG.ready();
+TG.applyTheme();
+TG.on('themeChanged',()=>TG.applyTheme());
+TG.on('deactivated',()=>flush());
 render();
 checkBadges();
 initCloud();
