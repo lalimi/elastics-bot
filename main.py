@@ -10,7 +10,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.storage.memory import MemoryStorage
 
 # --- НАЛАШТУВАННЯ ---
-TELEGRAM_TOKEN = os.getenv("BOT_TOKEN", "7783195191:AAFDBSaenQ_toENmHUsuuIY990C6y86_n88")
+TELEGRAM_TOKEN = os.environ["BOT_TOKEN"]
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TELEGRAM_TOKEN)
