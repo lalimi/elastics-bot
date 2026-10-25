@@ -1,20 +1,13 @@
 // node --test tests/ — перевірка Worker без мережі: підпис initData, webhook, активність, нагадування
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
 import worker from '../src/worker.js';
 import { verifyInitData, kyivNow, prevDay, reminderText } from '../src/lib.js';
+import { signInitData } from './helpers.mjs';
 
 const TOKEN = '123456:TEST-token';
 const OWNER = 777001;
 
-// initData, підписаний так само, як це робить Telegram
-export function signInitData(token, fields) {
-  const dcs = Object.keys(fields).sort().map(k => `${k}=${fields[k]}`).join('\n');
-  const secret = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
-  const hash = crypto.createHmac('sha256', secret).update(dcs).digest('hex');
-  return new URLSearchParams({ ...fields, hash }).toString();
-}
 const initFor = (id, authDate = Math.floor(Date.now() / 1000)) =>
   signInitData(TOKEN, { auth_date: String(authDate), query_id: 'AAE', user: JSON.stringify({ id, first_name: 'Тест' }) });
 
