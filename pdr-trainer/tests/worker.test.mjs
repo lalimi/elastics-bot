@@ -1,0 +1,141 @@
+// node --test tests/ — перевірка Worker без мережі: підпис initData, webhook, активність, нагадування
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import worker from '../src/worker.js';
+import { verifyInitData, kyivNow, prevDay, reminderText } from '../src/lib.js';
+
+const TOKEN = '123456:TEST-token';
+const OWNER = 777001;
+
+// initData, підписаний так само, як це робить Telegram
+export function signInitData(token, fields) {
+  const dcs = Object.keys(fields).sort().map(k => `${k}=${fields[k]}`).join('\n');
+  const secret = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
+  const hash = crypto.createHmac('sha256', secret).update(dcs).digest('hex');
+  return new URLSearchParams({ ...fields, hash }).toString();
+}
+const initFor = (id, authDate = Math.floor(Date.now() / 1000)) =>
+  signInitData(TOKEN, { auth_date: String(authDate), query_id: 'AAE', user: JSON.stringify({ id, first_name: 'Тест' }) });
+
+function makeEnv(extra = {}) {
+  const store = new Map();
+  return {
+    BOT_TOKEN: TOKEN, WEBHOOK_SECRET: 'whsec', ALLOWED_USER_ID: String(OWNER), TG_API: 'https://tg.test',
+    KV: { get: async k => (store.has(k) ? store.get(k) : null), put: async (k, v) => { store.set(k, v); } },
+    ASSETS: { fetch: async () => new Response('asset') },
+    store, ...extra
+  };
+}
+let sent = [];
+globalThis.fetch = async (url, init) => {
+  sent.push({ url: String(url), body: JSON.parse(init.body) });
+  return new Response(JSON.stringify({ ok: true, result: {} }));
+};
+const post = (path, body, headers = {}) => new Request('https://app.test' + path, {
+  method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body)
+});
+const msg = (fromId, text) => ({ update_id: 1, message: { message_id: 1, from: { id: fromId }, chat: { id: fromId, type: 'private' }, text } });
+
+test('initData: правильний підпис приймається, підроблений і застарілий — ні', async () => {
+  const ok = await verifyInitData(initFor(OWNER), TOKEN, 3600);
+  assert.equal(ok.user.id, OWNER);
+  assert.equal(await verifyInitData(initFor(OWNER), 'other:token', 3600), null);
+  const tampered = initFor(OWNER).replace('777001', '777002');
+  assert.equal(await verifyInitData(tampered, TOKEN, 3600), null);
+  const old = initFor(OWNER, Math.floor(Date.now() / 1000) - 7200);
+  assert.equal(await verifyInitData(old, TOKEN, 3600), null);
+  assert.equal(await verifyInitData('', TOKEN, 3600), null);
+});
+
+test('webhook: без правильного secret_token — 403', async () => {
+  const env = makeEnv(); sent = [];
+  assert.equal((await worker.fetch(post('/webhook', msg(OWNER, '/start')), env)).status, 403);
+  assert.equal((await worker.fetch(post('/webhook', msg(OWNER, '/start'), { 'X-Telegram-Bot-Api-Secret-Token': 'wrong' }), env)).status, 403);
+  assert.equal(sent.length, 0);
+});
+
+test('webhook: режим налаштування показує id на /start', async () => {
+  const env = makeEnv({ ALLOWED_USER_ID: '' }); sent = [];
+  const r = await worker.fetch(post('/webhook', msg(555, '/start'), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
+  assert.equal(r.status, 200);
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].body.text, /555/);
+  assert.equal(sent[0].body.reply_markup, undefined);
+});
+
+test('webhook: власниці — привітання з кнопкою Mini App, чужим — тиша', async () => {
+  const env = makeEnv(); sent = [];
+  await worker.fetch(post('/webhook', msg(OWNER, '/start'), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, `https://tg.test/bot${TOKEN}/sendMessage`);
+  assert.equal(sent[0].body.reply_markup.inline_keyboard[0][0].web_app.url, 'https://app.test/');
+  sent = [];
+  await worker.fetch(post('/webhook', msg(999, '/start'), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
+  assert.equal(sent.length, 0);
+});
+
+test('activity: власниця з валідним initData — записує день і серію', async () => {
+  const env = makeEnv();
+  const r = await worker.fetch(post('/api/activity', { initData: initFor(OWNER), streak: 4 }), env);
+  assert.equal(r.status, 200);
+  const a = JSON.parse(env.store.get('activity'));
+  assert.equal(a.streak, 4);
+  assert.equal(a.day, kyivNow(new Date()).date);
+  assert.equal((await worker.fetch(post('/api/activity', { initData: initFor(999), streak: 1 }), env)).status, 403);
+  assert.equal((await worker.fetch(post('/api/activity', { initData: initFor(OWNER).replace(/hash=\w+/, 'hash=00'), streak: 1 }), env)).status, 401);
+  assert.equal((await worker.fetch(post('/api/activity', { nope: 1 }), env)).status, 400);
+});
+
+test('інші шляхи віддаються зі статичних файлів', async () => {
+  const r = await worker.fetch(new Request('https://app.test/index.html'), makeEnv());
+  assert.equal(await r.text(), 'asset');
+});
+
+test('київський час: зимовий UTC+2 і літній UTC+3', () => {
+  assert.deepEqual(kyivNow(new Date('2026-01-15T17:00:00Z')), { date: '2026-01-15', hour: 19 });
+  assert.deepEqual(kyivNow(new Date('2026-07-15T16:00:00Z')), { date: '2026-07-15', hour: 19 });
+  assert.deepEqual(kyivNow(new Date('2026-07-15T21:30:00Z')), { date: '2026-07-16', hour: 0 });
+  assert.equal(prevDay('2026-03-01'), '2026-02-28');
+});
+
+test('текст нагадування', () => {
+  assert.equal(reminderText({ day: '2026-07-14', streak: 3 }, '2026-07-15'), 'Серія 3 дні під загрозою. 10 хвилин на ПДР?');
+  assert.equal(reminderText({ day: '2026-07-14', streak: 1 }, '2026-07-15'), 'Серія 1 день під загрозою. 10 хвилин на ПДР?');
+  assert.equal(reminderText({ day: '2026-07-14', streak: 12 }, '2026-07-15'), 'Серія 12 днів під загрозою. 10 хвилин на ПДР?');
+  assert.equal(reminderText({ day: '2026-07-15', streak: 3 }, '2026-07-15'), null);
+  assert.equal(reminderText({ day: '2026-07-10', streak: 3 }, '2026-07-15'), 'Почнімо нову серію? 10 хвилин на ПДР.');
+  assert.equal(reminderText(null, '2026-07-15'), 'Почнімо нову серію? 10 хвилин на ПДР.');
+});
+
+async function cron(env, iso) {
+  let p; await worker.scheduled({ scheduledTime: Date.parse(iso) }, env, { waitUntil: x => { p = x; } }); await p;
+}
+
+test('cron: о 19:00 за Києвом узимку і влітку, один раз на день, не після заняття', async () => {
+  for (const [at19, at18] of [['2026-01-15T17:00:00Z', '2026-01-15T16:00:00Z'], ['2026-07-15T16:00:00Z', '2026-07-15T15:00:00Z']]) {
+    const day = at19.slice(0, 10);
+    const env = makeEnv(); env.store.set('origin', 'https://app.test/');
+    env.store.set('activity', JSON.stringify({ day: prevDay(day), streak: 5 }));
+    sent = []; await cron(env, at18); assert.equal(sent.length, 0, '18:00 — ще рано');
+    await cron(env, at19); assert.equal(sent.length, 1, '19:00 — нагадування');
+    assert.equal(sent[0].body.text, 'Серія 5 днів під загрозою. 10 хвилин на ПДР?');
+    assert.equal(sent[0].body.chat_id, String(OWNER));
+    assert.equal(sent[0].body.reply_markup.inline_keyboard[0][0].web_app.url, 'https://app.test/');
+    await cron(env, new Date(Date.parse(at19) + 3600e3).toISOString()); assert.equal(sent.length, 1, 'вдруге того ж дня не шле');
+  }
+  const env = makeEnv(); env.store.set('activity', JSON.stringify({ day: '2026-07-15', streak: 2 }));
+  sent = []; await cron(env, '2026-07-15T16:00:00Z'); assert.equal(sent.length, 0, 'сьогодні вже займалась');
+});
+
+test('cron: якщо о 19:00 не вдалося надіслати — пробує о 20:00', async () => {
+  const env = makeEnv();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ ok: false }));
+  await cron(env, '2026-07-15T16:00:00Z');
+  assert.equal(env.store.get('reminded'), undefined);
+  globalThis.fetch = realFetch; sent = [];
+  await cron(env, '2026-07-15T17:00:00Z');
+  assert.equal(sent.length, 1);
+  assert.equal(env.store.get('reminded'), '2026-07-15');
+});

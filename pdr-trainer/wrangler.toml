@@ -1,0 +1,22 @@
+# «Зелена хвиля» — один Worker: статичні файли Mini App з public/ + webhook бота + cron-нагадування.
+# Секрети BOT_TOKEN, WEBHOOK_SECRET, ALLOWED_USER_ID задаються лише через `wrangler secret put`.
+name = "zelena-khvylia"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# id з'являється після `npx wrangler kv namespace create KV` (див. README)
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_KV_ID"
+
+# щогодини (UTC); у коді перевіряється, що в Києві 19:00 — так і літній, і зимовий час працюють
+[triggers]
+crons = ["0 * * * *"]
+
+[observability]
+enabled = true
