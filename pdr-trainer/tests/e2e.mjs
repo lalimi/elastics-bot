@@ -150,6 +150,27 @@ test('сцени: кожна анімована ілюстрація малює�
   await context.close();
 });
 
+test('пояснення простими словами: після помилки — одразу, після правильної — на дотик', async () => {
+  const { page, context, errors } = await open();
+  await page.waitForFunction(() => window.EXPLAIN);
+  const id = await page.evaluate(() => QB.find(x => !x.sign).id);
+  const [plain, hook] = await page.evaluate(id => EXPLAIN[id], id);
+  await page.evaluate(id => startQuiz('train', [QMAP[id], QMAP[id]]), id);
+  await answer(page, false);
+  assert.equal(await page.locator('.feedback .plain p').textContent(), plain);
+  assert.equal(await page.locator('.feedback .hook p').textContent(), hook);
+  assert.match(await page.locator('.feedback .rulestxt').textContent(), /^Як у правилах/);
+  await next(page); await answer(page, true);
+  assert.equal(await page.locator('.feedback b').textContent(), 'Правильно');
+  assert.equal(await page.locator('.feedback .plain').isVisible(), false);
+  await page.click('.feedback .more summary');
+  assert.equal(await page.locator('.feedback .plain').isVisible(), true);
+  await next(page);
+  assert.equal(await page.locator('.wcard .wa.hint').textContent(), '💡 ' + hook);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('іспит: складений до кінця', async () => {
   const { page, context, errors } = await open();
   await page.click('[data-act="examIntro"]'); await page.click('[data-act="startExam"]');

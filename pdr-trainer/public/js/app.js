@@ -373,7 +373,7 @@ function vQuiz(){
     const ok=Z.order[Z.picked]===0, failNow=Z.mode==='exam'&&Z.mistakes>=3;
     const last=Z.i+1>=total;
     const label=failNow?'До результатів':last?'Завершити':'Далі';
-    fb=`<div class="feedback ${ok?'ok':'bad'}" role="status"><span class="fb-ico" aria-hidden="true">${ok?ICON.ok:ICON.warn}</span><b>${ok?'Правильно':'Неправильно'}</b>${qq.e?`<p>${esc(qq.e)}</p>`:''}${failNow?'<p class="warnline">Це третя помилка — іспит зупинено.</p>':''}</div><button class="btn" data-act="next" id="nextBtn">${label}</button>`;
+    fb=feedbackHtml(qq,ok,failNow)+`<button class="btn" data-act="next" id="nextBtn">${label}</button>`;
   }
   const num=Z.i+1;
   return `<div class="qtop"><button class="iconbtn" data-act="quitQuiz" aria-label="Вийти">${ICON.close}</button>
@@ -387,13 +387,37 @@ function vQuiz(){
     ${fb}
   </article>`;
 }
+// Картка після відповіді. Після помилки — спершу «простими словами» й асоціація, нижче — як у правилах;
+// після правильної відповіді простіше пояснення розгортається на дотик.
+function feedbackHtml(qq,ok,failNow){
+  const pl=plainOf(qq.id);
+  const plain=pl?`<div class="plain"><span class="lbl">Простими словами</span><p>${esc(pl[0])}</p></div><div class="hook"><span aria-hidden="true">💡</span><p>${esc(pl[1])}</p></div>`:'';
+  const body=ok
+    ?`${qq.e?`<p>${esc(qq.e)}</p>`:''}${plain?`<details class="more"><summary>Простими словами</summary>${plain}</details>`:''}`
+    :`${plain}${qq.e?`<p class="${plain?'rulestxt':''}">${plain?'<span class="lbl">Як у правилах</span>':''}${esc(qq.e)}</p>`:''}`;
+  return `<div class="feedback ${ok?'ok':'bad'}" role="status" data-q="${qq.id}"><span class="fb-ico" aria-hidden="true">${ok?ICON.ok:ICON.warn}</span><b>${ok?'Правильно':'Неправильно'}</b>${body}${failNow?'<p class="warnline">Це третя помилка — іспит зупинено.</p>':''}</div>`;
+}
+// Пояснення простими словами — окремий файл (js/explain.js), підвантажується після старту
+const plainOf=id=>window.EXPLAIN&&window.EXPLAIN[id]||null;
+let explainLoading=false;
+function loadExplain(){
+  if(window.EXPLAIN||explainLoading) return;
+  explainLoading=true;
+  const s=document.createElement('script'); s.src='js/explain.js';
+  s.onload=()=>{ // якщо картка з помилкою вже на екрані — доповнюємо її
+    const el=document.querySelector('.qcard .feedback[data-q]');
+    if(el&&view==='quiz'&&Z&&Z.picked!==null){ const qq=Z.list[Z.i]; el.outerHTML=feedbackHtml(qq,Z.order[Z.picked]===0,Z.mode==='exam'&&Z.mistakes>=3); }
+  };
+  s.onerror=()=>{ explainLoading=false; };
+  document.head.appendChild(s);
+}
 function answer(k){
   if(!Z||Z.picked!==null) return;
   const qq=Z.list[Z.i]; if(k<0||k>=qq.o.length) return;
   Z.picked=k; const ok=Z.order[k]===0;
   recordAnswer(qq.id,ok);
   if(ok){ Z.combo++; Z.correct++; const gain=10+Math.min(10,(Z.combo-1)*2); S.xp+=gain; Z.xp+=gain; S.bestCombo=Math.max(S.bestCombo,Z.combo); sfx('ok'); TG.haptic('success'); xpFloat('+'+gain+' XP'); }
-  else { Z.combo=0; Z.mistakes++; Z.wrong.push({q:qq,picked:qq.o[Z.order[k]]}); sfx('bad'); buzz(); }
+  else { loadExplain(); Z.combo=0; Z.mistakes++; Z.wrong.push({q:qq,picked:qq.o[Z.order[k]]}); sfx('bad'); buzz(); }
   if(Z.mode==='marathon') S.marathon=(Z.i+1>=QB.length)?0:Z.i+1;
   save(); checkBadges(); render(); pingActivity();
   const nb=document.getElementById('nextBtn');
@@ -429,7 +453,7 @@ function vResult(){
   } else {
     head=`<section class="plate neutral"><div class="inner"><p class="plate-k">${esc(modeTitleOf(R.mode,R.sec))}</p><h1 class="plate-t">${R.correct} <span class="of">з</span> ${R.answered}</h1><p>правильних відповідей${R.xp?`, +${R.xp} XP`:''}</p></div></section>`;
   }
-  const wrong=R.wrong.length?`<h2 class="h2">Де були помилки</h2>`+R.wrong.map(w=>`<div class="wcard"><p class="wq">${esc(w.q.q)}</p>${w.q.sign?`<div class="signbox" style="justify-content:flex-start;margin:4px 0">${signSvg(w.q.sign).replace('width="128" height="128"','width="64" height="64"')}</div>`:''}<p class="wa bad">Твоя відповідь: ${esc(w.picked)}</p><p class="wa ok">Правильно: ${esc(w.q.o[0])}</p></div>`).join(''):'';
+  const wrong=R.wrong.length?`<h2 class="h2">Де були помилки</h2>`+R.wrong.map(w=>`<div class="wcard"><p class="wq">${esc(w.q.q)}</p>${w.q.sign?`<div class="signbox" style="justify-content:flex-start;margin:4px 0">${signSvg(w.q.sign).replace('width="128" height="128"','width="64" height="64"')}</div>`:''}<p class="wa bad">Твоя відповідь: ${esc(w.picked)}</p><p class="wa ok">Правильно: ${esc(w.q.o[0])}</p>${plainOf(w.q.id)?`<p class="wa hint">💡 ${esc(plainOf(w.q.id)[1])}</p>`:''}</div>`).join(''):'';
   return `<div class="qtop"><button class="iconbtn" data-act="home" aria-label="На головну">${ICON.back}</button><div class="gtitle">Результат</div></div>
   ${head}${wrong}
   <div class="stack" style="margin-top:18px">
@@ -729,3 +753,4 @@ TG.on('deactivated',()=>flush());
 render();
 checkBadges();
 initCloud();
+setTimeout(loadExplain,700);
