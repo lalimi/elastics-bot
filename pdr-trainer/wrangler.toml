@@ -12,7 +12,7 @@ binding = "ASSETS"
 # id з'являється після `npx wrangler kv namespace create KV` (див. README)
 [[kv_namespaces]]
 binding = "KV"
-id = "REPLACE_WITH_KV_ID"
+id = "e1577dd66ee64f119572015618add7ea"
 
 # щогодини (UTC); у коді перевіряється, що в Києві 19:00 — так і літній, і зимовий час працюють
 [triggers]
