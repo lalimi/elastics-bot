@@ -116,6 +116,9 @@ const ICON={
   star:'<svg viewBox="0 0 24 24"><path d="M12 3.2l2.6 5.5 6 .8-4.4 4.1 1.1 5.9L12 16.6l-5.3 2.9 1.1-5.9L3.4 9.5l6-.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
   soundOn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/></svg>',
   soundOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>',
+  ok:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 12.5l4.2 4.2 8.8-9.4"/></svg>',
+  no:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>',
+  warn:'<svg viewBox="0 0 24 24"><rect x="10.4" y="5" width="3.2" height="9.5" rx="1.6" fill="currentColor"/><circle cx="12" cy="18.4" r="1.9" fill="currentColor"/></svg>',
   heart:'<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.4.7-1.2 2.2-2.4 4.3-2.4 3.7 0 5.8 3.8 4.3 7.2C19.5 16.4 12 21 12 21z"/></svg>'
 };
 function logoSvg(){return '<svg class="logo" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><defs><linearGradient id="lgG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2BD47F"/><stop offset="1" stop-color="#0E9F8E"/></linearGradient></defs><rect width="36" height="36" rx="11" fill="url(#lgG)"/><path d="M4 27c4-3.2 7-3.2 10 0s6 3.2 9 0 6-3.2 9 0" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="2" stroke-linecap="round"/><rect x="12" y="4" width="12" height="23" rx="4" fill="#0B1814"/><circle cx="18" cy="9.5" r="2.6" fill="#4A2525"/><circle cx="18" cy="15.5" r="2.6" fill="#4A4120"/><circle cx="18" cy="21.5" r="2.9" fill="#5CFFAA"/></svg>';}
@@ -363,14 +366,14 @@ function vQuiz(){
   let hud='';
   if(Z.mode==='exam'){ const r=remaining(); hud=`<span class="chip-s ${r<=120?'low':''}" id="timer" aria-label="Залишилось часу">${fmt(r)}</span><span class="marks" aria-label="Помилок: ${Z.mistakes} з 2 дозволених">${[0,1].map(i=>`<i class="${i<Z.mistakes?'on':''}"></i>`).join('')}</span>`; }
   else if(Z.combo>=3){ hud=`<span class="chip-s combo" aria-label="Серія правильних відповідей">🔥 ${Z.combo}</span>`; }
-  const opts=Z.order.map((oi,k)=>{let cls='opt';if(answered){if(oi===0)cls+=' correct';else if(k===Z.picked)cls+=' wrong';else cls+=' dim';}
-    return `<button class="${cls}" data-act="ans" data-arg="${k}" ${answered?'disabled':''}><span class="n">${k+1}</span><span>${esc(qq.o[oi])}</span></button>`;}).join('');
+  const opts=Z.order.map((oi,k)=>{let cls='opt',mark=k+1;if(answered){if(oi===0){cls+=' correct';mark=ICON.ok;}else if(k===Z.picked){cls+=' wrong';mark=ICON.no;}else cls+=' dim';}
+    return `<button class="${cls}" data-act="ans" data-arg="${k}" ${answered?'disabled':''}><span class="n">${mark}</span><span>${esc(qq.o[oi])}</span></button>`;}).join('');
   let fb='';
   if(answered){
     const ok=Z.order[Z.picked]===0, failNow=Z.mode==='exam'&&Z.mistakes>=3;
     const last=Z.i+1>=total;
     const label=failNow?'До результатів':last?'Завершити':'Далі';
-    fb=`<div class="feedback ${ok?'ok':'bad'}" role="status"><b>${ok?'Правильно':'Неправильно'}</b>${qq.e?`<p>${esc(qq.e)}</p>`:''}${failNow?'<p class="warnline">Це третя помилка — іспит зупинено.</p>':''}</div><button class="btn" data-act="next" id="nextBtn">${label}</button>`;
+    fb=`<div class="feedback ${ok?'ok':'bad'}" role="status"><span class="fb-ico" aria-hidden="true">${ok?ICON.ok:ICON.warn}</span><b>${ok?'Правильно':'Неправильно'}</b>${qq.e?`<p>${esc(qq.e)}</p>`:''}${failNow?'<p class="warnline">Це третя помилка — іспит зупинено.</p>':''}</div><button class="btn" data-act="next" id="nextBtn">${label}</button>`;
   }
   const num=Z.i+1;
   return `<div class="qtop"><button class="iconbtn" data-act="quitQuiz" aria-label="Вийти">${ICON.close}</button>
@@ -617,7 +620,7 @@ function wrongTap(i,b){
   const bg=document.getElementById('car'+b); if(bg) bg.classList.add('blocker');
   document.querySelectorAll('.heart').forEach((h,k)=>h.classList.toggle('lost',k>=G.lives));
   const fb=document.getElementById('gfb');
-  if(fb) fb.innerHTML=`<div class="feedback bad" role="status"><b>Спершу ${LET[b]}</b><p>${reasonText(sc.cars[i],sc.cars[b],i,b)}</p><p>Черговість: ${orderText(sc)}.</p></div><button class="btn" data-act="gNext">${G.lives>0?'Показати і їхати далі':'Показати і завершити'}</button>`;
+  if(fb) fb.innerHTML=`<div class="feedback bad" role="status"><span class="fb-ico" aria-hidden="true">${ICON.warn}</span><b>Спершу ${LET[b]}</b><p>${reasonText(sc.cars[i],sc.cars[b],i,b)}</p><p>Черговість: ${orderText(sc)}.</p></div><button class="btn" data-act="gNext">${G.lives>0?'Показати і їхати далі':'Показати і завершити'}</button>`;
   const nb=fb&&fb.querySelector('.btn'); if(nb) nb.scrollIntoView({behavior:reduced?'auto':'smooth',block:'nearest'});
 }
 function gNext(){

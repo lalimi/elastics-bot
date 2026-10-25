@@ -158,17 +158,16 @@ button:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--focus);out
 .opt .n{flex:none;width:28px;height:28px;border-radius:9px;background:var(--surface2);display:grid;place-items:center;font-weight:800;font-size:14px;transition:background .2s,color .2s}
 .opt:not(:disabled):active{transform:scale(.98);background:var(--surface2)}
 .opt.correct{border-color:var(--green);background:var(--green-bg);animation:okGlow .9s ease}
-.opt.correct .n,.opt.wrong .n{color:#fff;font-size:0}
+.opt.correct .n,.opt.wrong .n{color:#fff}
 .opt.correct .n{background:var(--green)}
 .opt.wrong .n{background:var(--red)}
-.opt.correct .n::after,.opt.wrong .n::after{font-size:16px;line-height:1;animation:pop .4s cubic-bezier(.2,1.6,.4,1)}
-.opt.correct .n::after{content:"✓"}
-.opt.wrong .n::after{content:"✕"}
+.opt .n svg{display:block;width:17px;height:17px;animation:pop .4s cubic-bezier(.2,1.6,.4,1)}
 .opt.wrong{border-color:var(--red);background:var(--red-bg);animation:shake .45s}
 .opt.dim{opacity:.45}
 .feedback{margin-top:14px;padding:12px 14px 12px 52px;border-radius:16px;background:var(--surface2);position:relative;animation:rise .45s cubic-bezier(.2,.9,.3,1) both}
-.feedback::before{content:"✓";position:absolute;left:12px;top:12px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:#fff;font-weight:900;font-size:15px;animation:pop .45s cubic-bezier(.2,1.6,.4,1) .1s both}
-.feedback.bad::before{content:"!";background:var(--red)}
+.fb-ico{position:absolute;left:12px;top:12px;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:#fff;animation:pop .45s cubic-bezier(.2,1.6,.4,1) .1s both}
+.feedback.bad .fb-ico{background:var(--red)}
+.fb-ico svg{display:block;width:17px;height:17px}
 .feedback b{font-size:16.5px;font-weight:800}
 .feedback p{margin:5px 0 0;font-size:15px}
 .feedback .warnline{color:var(--red);font-weight:700}
