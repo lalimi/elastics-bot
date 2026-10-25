@@ -1,0 +1,91 @@
+<!doctype html>
+<!-- Кадри для аватарки бота (?kind=avatar, 640×640) і привітальної анімації (?kind=welcome, 800×450).
+     Рендерить scripts/make-media.mjs: зупиняє CSS-анімації і знімає кадр за кадром. -->
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;800&family=Unbounded:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0}
+  html,body{background:#08140F;overflow:hidden}
+  .stage{position:relative;overflow:hidden;background:radial-gradient(60% 55% at 50% 42%,#1E6B50 0%,#0F3528 45%,#08140F 100%)}
+  .avatar{width:640px;height:640px}
+  .welcome{width:800px;height:450px;background:radial-gradient(70% 90% at 85% 0%,rgba(43,212,127,.35),transparent 60%),radial-gradient(60% 80% at 0% 100%,rgba(14,159,142,.35),transparent 60%),linear-gradient(160deg,#103A2D,#08140F)}
+  svg{position:absolute;inset:0;width:100%;height:100%}
+  /* аватарка: червоний → червоний+жовтий → зелений і хвилі від зеленого */
+  .r{animation:aR 4s steps(1) infinite}
+  .y{animation:aY 4s steps(1) infinite}
+  .g{animation:aG 4s infinite}
+  .ring{animation:ring 4s cubic-bezier(.2,.7,.3,1) infinite backwards;transform-box:fill-box;transform-origin:center}
+  .ring.b{animation-delay:.45s}
+  .ring.c{animation-delay:.9s}
+  .wave{animation:wave 4s linear infinite}
+  @keyframes aR{0%{opacity:1}35%{opacity:0}100%{opacity:0}}
+  @keyframes aY{0%{opacity:0}20%{opacity:1}35%{opacity:0}100%{opacity:0}}
+  @keyframes aG{0%,34%{opacity:0}36%{opacity:1}100%{opacity:1}}
+  @keyframes ring{0%,35%{opacity:0;transform:scale(.4)}40%{opacity:.9}100%{opacity:0;transform:scale(2.6)}}
+  @keyframes wave{to{transform:translateX(-400px)}}
+  /* привітання: світлофори хвилею, авто їде */
+  .wl-r{animation:wR 4s steps(1) infinite backwards;animation-delay:calc(var(--i)*.55s)}
+  .wl-g{animation:wG 4s steps(1) infinite backwards;animation-delay:calc(var(--i)*.55s)}
+  @keyframes wR{0%{opacity:1}12%{opacity:.12}100%{opacity:.12}}
+  @keyframes wG{0%{opacity:.12}12%{opacity:1}100%{opacity:1}}
+  .car{animation:car 4s linear infinite}
+  @keyframes car{from{transform:translateX(-120px)}to{transform:translateX(920px)}}
+  .dash{animation:dash .5s linear infinite}
+  @keyframes dash{to{stroke-dashoffset:-48}}
+  .wheel{animation:spin .4s linear infinite;transform-box:fill-box;transform-origin:center}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .title{position:absolute;left:44px;top:46px;color:#fff;font-family:Unbounded,sans-serif;font-weight:800;font-size:58px;letter-spacing:-1.5px;line-height:1}
+  .title span{background:linear-gradient(180deg,#fff 30%,#9FF5C8);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{position:absolute;left:46px;top:122px;color:rgba(255,255,255,.82);font-family:Manrope,sans-serif;font-weight:800;font-size:22px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const kind=new URLSearchParams(location.search).get('kind')||'avatar';
+const root=document.getElementById('root');
+const lens=(id,hi,c)=>`<radialGradient id="${id}" cx=".42" cy=".38" r=".65"><stop offset="0" stop-color="${hi}"/><stop offset=".55" stop-color="${c}"/><stop offset="1" stop-color="${c}"/></radialGradient>`;
+const glow=(id,c)=>`<radialGradient id="${id}"><stop offset="0" stop-color="${c}" stop-opacity=".85"/><stop offset=".45" stop-color="${c}" stop-opacity=".3"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></radialGradient>`;
+const DEFS=`<defs>${lens('lR','#FFC2BD','#FF3B30')}${lens('lY','#FFF4C2','#FFC400')}${lens('lG','#C9FFE2','#1EE07A')}${glow('gR','#FF3B30')}${glow('gY','#FFC400')}${glow('gG','#1EE07A')}
+<linearGradient id="wv" x1="0" x2="1"><stop offset="0" stop-color="#2BD47F" stop-opacity="0"/><stop offset=".5" stop-color="#2BD47F"/><stop offset="1" stop-color="#2BD47F" stop-opacity="0"/></linearGradient>
+<linearGradient id="beam" x1="0" x2="1"><stop offset="0" stop-color="#FFF6C8" stop-opacity=".8"/><stop offset="1" stop-color="#FFF6C8" stop-opacity="0"/></linearGradient></defs>`;
+function lamp(cx,cy,r,col,cls,off){
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${off}"/><g class="${cls}"><circle cx="${cx}" cy="${cy}" r="${r*2.6}" fill="url(#g${col})"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#l${col})"/></g>`;
+}
+function wavePath(y,amp,len){ let d=`M-200 ${y}`; for(let x=-200;x<len;x+=200) d+=` c50 ${-amp} 150 ${-amp} 200 0 s150 ${amp} 200 0`; return d; }
+if(kind==='avatar'){
+  root.className='stage avatar';
+  root.innerHTML=`<svg viewBox="0 0 640 640">${DEFS}
+    <g class="wave"><path d="${wavePath(470,60,1100)}" fill="none" stroke="#2BD47F" stroke-width="26" stroke-linecap="round" opacity=".28"/><path d="${wavePath(520,50,1100)}" fill="none" stroke="#0E9F8E" stroke-width="18" stroke-linecap="round" opacity=".3"/></g>
+    <circle class="ring" cx="320" cy="430" r="80" fill="none" stroke="#2BD47F" stroke-width="10"/>
+    <circle class="ring b" cx="320" cy="430" r="80" fill="none" stroke="#2BD47F" stroke-width="8"/>
+    <circle class="ring c" cx="320" cy="430" r="80" fill="none" stroke="#2BD47F" stroke-width="6"/>
+    <rect x="236" y="104" width="180" height="440" rx="64" fill="rgba(0,0,0,.4)" transform="translate(10 14)"/>
+    <rect x="230" y="100" width="180" height="440" rx="64" fill="#0E1418" stroke="#2C3A42" stroke-width="6"/>
+    ${[170,300,430].map(y=>`<path d="M246 ${y-46} Q320 ${y-104} 394 ${y-46} L386 ${y-34} Q320 ${y-80} 254 ${y-34}Z" fill="#05090B"/>`).join('')}
+    ${lamp(320,170,52,'R','r','#3A1514')}
+    ${lamp(320,300,52,'Y','y','#3A3112')}
+    ${lamp(320,430,52,'G','g','#0F2E1F')}
+  </svg>`;
+} else {
+  root.className='stage welcome';
+  const lights=[0,1,2,3,4,5].map(i=>{ const x=150+i*120; return `<g transform="translate(${x} 214)" style="--i:${i}"><rect x="-3" y="58" width="6" height="96" rx="2" fill="rgba(255,255,255,.22)"/><rect x="-19" y="0" width="38" height="70" rx="12" fill="#07110E" stroke="rgba(255,255,255,.18)" stroke-width="2"/><circle cy="17" r="9" fill="#2A1212"/><circle class="wl-r" cy="17" r="9" fill="#FF5252"/><circle class="wl-r" cy="17" r="22" fill="url(#gR)"/><circle cy="35" r="9" fill="#3B3520"/><circle cy="53" r="9" fill="#0E2A1C"/><circle class="wl-g" cy="53" r="9" fill="#3CFF9A"/><circle class="wl-g" cy="53" r="24" fill="url(#gG)"/></g>`; }).join('');
+  root.innerHTML=`<svg viewBox="0 0 800 450">${DEFS}${lights}
+    <rect x="0" y="360" width="800" height="70" fill="#0E1D19"/><rect x="0" y="358" width="800" height="3" fill="rgba(255,255,255,.12)"/>
+    <line class="dash" x1="-60" y1="396" x2="860" y2="396" stroke="rgba(255,255,255,.4)" stroke-width="4" stroke-dasharray="24 24"/>
+    <g class="car"><g transform="translate(0 418)">
+      <path d="M52 -30 L190 -48 L190 -8 L52 -22Z" fill="url(#beam)"/>
+      <path d="M-52 -14 V-32 Q-50 -41 -38 -41 H-23 L-11 -60 Q-8 -64 -2 -64 H20 Q28 -64 33 -56 L43 -41 Q56 -39 56 -27 V-14 Z" fill="#FFC23D"/>
+      <path d="M-19 -41 L-8 -57 H7 V-41 Z M12 -41 V-57 H21 Q26 -57 28.5 -53 L35.5 -41 Z" fill="#18303A"/>
+      <rect x="-52" y="-31" width="6" height="8" rx="2" fill="#FF4D4D"/><circle cx="53" cy="-30" r="4" fill="#FFF6C8"/>
+      <g transform="translate(-30 -12)"><g class="wheel"><circle r="13" fill="#0D0D0D"/><circle r="6" fill="#C9D1D6"/><path d="M0-11V11M-11 0H11" stroke="#0D0D0D" stroke-width="2.4"/></g></g>
+      <g transform="translate(32 -12)"><g class="wheel"><circle r="13" fill="#0D0D0D"/><circle r="6" fill="#C9D1D6"/><path d="M0-11V11M-11 0H11" stroke="#0D0D0D" stroke-width="2.4"/></g></g>
+    </g></g>
+  </svg><div class="title"><span>Зелена хвиля</span></div><div class="sub">тренажер ПДР · 850 питань · іспит за 20 хвилин</div>`;
+}
+window.ready=document.fonts.ready.then(()=>true);
+</script>
+</body>
+</html>

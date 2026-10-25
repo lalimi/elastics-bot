@@ -136,6 +136,20 @@ test('браузер: застосунок працює, навіть якщо t
   await context.close();
 });
 
+test('сцени: кожна анімована ілюстрація малюється в картці питання', async () => {
+  const { page, context, errors } = await open();
+  const ids = await page.evaluate(() => Object.keys(SCN.SCENES));
+  assert.ok(ids.length > 100);
+  for (const id of ids) {
+    await page.evaluate(id => startQuiz('train', [QMAP[id]]), id);
+    assert.equal(await page.locator('.qcard .stage.scene svg').count(), 1, id);
+  }
+  await page.evaluate(() => startQuiz('train', [QB.find(x => x.sign)]));
+  assert.equal(await page.locator('.qcard .stage.sign svg').count(), 1);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('іспит: складений до кінця', async () => {
   const { page, context, errors } = await open();
   await page.click('[data-act="examIntro"]'); await page.click('[data-act="startExam"]');
@@ -300,13 +314,13 @@ test('Telegram: ready/expand, ім’я, тема, кольори, безпеч�
   assert.equal((await tgEvents(page, 'web_app_expand')).length, 1);
   assert.match(await page.locator('.hello').textContent(), /, Тест!$/);
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
-  assert.equal(await color(page, 'web_app_set_header_color'), '#14171B');
-  assert.equal(await color(page, 'web_app_set_background_color'), '#14171B');
-  assert.equal(await color(page, 'web_app_set_bottom_bar_color'), '#14171B');
-  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(20, 23, 27)');
+  assert.equal(await color(page, 'web_app_set_header_color'), '#0B1210');
+  assert.equal(await color(page, 'web_app_set_background_color'), '#0B1210');
+  assert.equal(await color(page, 'web_app_set_bottom_bar_color'), '#0B1210');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(11, 18, 16)');
   await tgSend(page, 'theme_changed', { theme_params: LIGHT });
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
-  assert.equal(await color(page, 'web_app_set_header_color'), '#E7EAED');
+  assert.equal(await color(page, 'web_app_set_header_color'), '#EEF2F0');
   await tgSend(page, 'safe_area_changed', { top: 47, bottom: 34, left: 0, right: 0 });
   await tgSend(page, 'content_safe_area_changed', { top: 46, bottom: 0, left: 0, right: 0 });
   const pad = await page.evaluate(() => { const s = getComputedStyle(document.documentElement); return [s.paddingTop, s.paddingBottom]; });

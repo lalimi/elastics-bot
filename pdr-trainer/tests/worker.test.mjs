@@ -61,11 +61,31 @@ test('webhook: власниці — привітання з кнопкою Mini 
   const env = makeEnv(); sent = [];
   await worker.fetch(post('/webhook', msg(OWNER, '/start'), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
   assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, `https://tg.test/bot${TOKEN}/sendAnimation`);
+  assert.equal(sent[0].body.animation, 'https://app.test/bot/welcome.mp4');
+  assert.match(sent[0].body.caption, /Зелена хвиля/);
+  assert.equal(sent[0].body.reply_markup.inline_keyboard[0][0].web_app.url, 'https://app.test/');
+  sent = [];
+  await worker.fetch(post('/webhook', msg(OWNER, 'привіт'), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
+  assert.equal(sent.length, 1);
   assert.equal(sent[0].url, `https://tg.test/bot${TOKEN}/sendMessage`);
   assert.equal(sent[0].body.reply_markup.inline_keyboard[0][0].web_app.url, 'https://app.test/');
   sent = [];
   await worker.fetch(post('/webhook', msg(999, '/start'), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
   assert.equal(sent.length, 0);
+});
+
+test('webhook: якщо анімація не надіслалась — привітання текстом', async () => {
+  const env = makeEnv(); const calls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    calls.push(String(url).split('/').pop());
+    return new Response(JSON.stringify({ ok: !String(url).endsWith('/sendAnimation') }));
+  };
+  try {
+    await worker.fetch(post('/webhook', msg(OWNER, '/start'), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
+  } finally { globalThis.fetch = realFetch; }
+  assert.deepEqual(calls, ['sendAnimation', 'sendMessage']);
 });
 
 test('activity: власниця з валідним initData — записує день і серію', async () => {

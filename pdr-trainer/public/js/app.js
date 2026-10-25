@@ -118,7 +118,7 @@ const ICON={
   soundOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>',
   heart:'<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.4.7-1.2 2.2-2.4 4.3-2.4 3.7 0 5.8 3.8 4.3 7.2C19.5 16.4 12 21 12 21z"/></svg>'
 };
-function logoSvg(){return '<svg width="22" height="36" viewBox="0 0 22 36" aria-hidden="true"><rect x="1" y="1" width="20" height="34" rx="6" fill="#23272D" stroke="#6B737D" stroke-width="1"/><circle cx="11" cy="9" r="4" fill="#5B2626"/><circle cx="11" cy="18" r="4" fill="#5A4A1C"/><circle cx="11" cy="27" r="4.6" fill="#2BD46F"/></svg>';}
+function logoSvg(){return '<svg class="logo" width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><defs><linearGradient id="lgG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2BD47F"/><stop offset="1" stop-color="#0E9F8E"/></linearGradient></defs><rect width="36" height="36" rx="11" fill="url(#lgG)"/><path d="M4 27c4-3.2 7-3.2 10 0s6 3.2 9 0 6-3.2 9 0" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="2" stroke-linecap="round"/><rect x="12" y="4" width="12" height="23" rx="4" fill="#0B1814"/><circle cx="18" cy="9.5" r="2.6" fill="#4A2525"/><circle cx="18" cy="15.5" r="2.6" fill="#4A4120"/><circle cx="18" cy="21.5" r="2.9" fill="#5CFFAA"/></svg>';}
 function signIcon(ic){
   const k=ic[0],g=ic[1]||'';const W='class="ico" viewBox="0 0 40 40" aria-hidden="true"';
   const F='font-family="Fira Sans Extra Condensed,Fira Sans,sans-serif" font-weight="800" text-anchor="middle"';
@@ -200,9 +200,30 @@ function signSvg(k){
   }
   return '';
 }
-function roadBar(pct){
-  const p=Math.max(0,Math.min(100,pct));
-  return `<div class="road" role="img" aria-label="Пройдено ${p}% шляху до прав"><span class="trail" style="width:calc(16px + (100% - 52px) * ${p/100})"></span><span class="car" style="left:calc(16px + (100% - 52px) * ${p/100})"><svg width="32" height="20" viewBox="0 0 32 20" aria-hidden="true"><rect x="1" y="3" width="30" height="14" rx="5" fill="#F2B705"/><rect x="18" y="5" width="7" height="10" rx="2" fill="#2D3137"/><rect x="4" y="6" width="4" height="8" rx="1.5" fill="#2D3137"/><circle cx="30" cy="5.5" r="1.5" fill="#fff"/><circle cx="30" cy="14.5" r="1.5" fill="#fff"/></svg></span><span class="finish"></span></div>`;
+// Нічна дорога: світлофори хвилею вмикають зелений, авто стоїть там, скільки пройдено до прав
+function waveRoad(pct){
+  const p=Math.max(0,Math.min(100,pct)), x0=24, x1=304, cx=x0+(x1-x0)*p/100;
+  const lights=[0,1,2,3,4].map(i=>`<g transform="translate(${36+i*64} 2)" style="--i:${i}"><rect x="-1.3" y="24" width="2.6" height="32" rx="1" fill="rgba(255,255,255,.2)"/><rect x="-7.5" y="0" width="15" height="28" rx="4.5" fill="#07110E" stroke="rgba(255,255,255,.16)"/><circle class="wl-r" cy="7" r="3.7" fill="#FF5252" filter="url(#wlGlow)"/><circle cy="14" r="3.7" fill="#3B3520"/><circle class="wl-g" cy="21" r="3.7" fill="#3CFF9A" filter="url(#wlGlow)"/></g>`).join('');
+  return `<svg class="wave-road" viewBox="0 0 340 92" role="img" aria-label="Пройдено ${p}% шляху до прав">
+  <defs><filter id="wlGlow" x="-150%" y="-150%" width="400%" height="400%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <linearGradient id="beamG" x1="0" x2="1"><stop offset="0" stop-color="#FFF6C8" stop-opacity=".75"/><stop offset="1" stop-color="#FFF6C8" stop-opacity="0"/></linearGradient></defs>
+  ${lights}
+  <rect x="0" y="58" width="340" height="28" rx="9" fill="#0E1D19" stroke="rgba(255,255,255,.08)"/>
+  <line class="dash" x1="6" y1="72" x2="334" y2="72" stroke="rgba(255,255,255,.35)" stroke-width="2" stroke-dasharray="12 12"/>
+  <rect class="trail" x="${x0}" y="70.5" width="${(cx-x0).toFixed(1)}" height="3" rx="1.5" fill="#2BD47F"/>
+  <g transform="translate(318 58)"><rect x="-.9" y="-22" width="1.8" height="24" fill="rgba(255,255,255,.55)"/><g transform="translate(.9 -22)"><rect width="14" height="10" fill="#fff"/><path d="M0 0h3.5v2.5H0zM7 0h3.5v2.5H7zM3.5 2.5H7V5H3.5zM10.5 2.5H14V5h-3.5zM0 5h3.5v2.5H0zM7 5h3.5v2.5H7zM3.5 7.5H7V10H3.5zM10.5 7.5H14V10h-3.5z" fill="#111"/></g></g>
+  <g transform="translate(${cx.toFixed(1)} 82)"><g class="carIn" style="--from:${(x0-cx).toFixed(1)}px"><g class="carbody">
+    <path class="beam" d="M21 -12 L74 -21 L74 -3 Z" fill="url(#beamG)"/>
+    <path d="M-21 -6 V-13 Q-20 -16.5 -15.5 -16.5 H-9.5 L-4.5 -24 Q-3.4 -25.5 -1 -25.5 H8 Q11 -25.5 13 -22.5 L17.2 -16.5 Q22.5 -15.6 22.5 -11 V-6 Z" fill="#FFC23D"/>
+    <path d="M-7.6 -16.5 L-3.4 -23 H3 V-16.5 Z M5 -16.5 V-23 H8.6 Q10.6 -23 11.6 -21.2 L14.4 -16.5 Z" fill="#18303A"/>
+    <rect x="-21" y="-12.5" width="2.4" height="3.2" rx="1" fill="#FF4D4D"/><circle cx="21.3" cy="-12" r="1.7" fill="#FFF6C8"/>
+    <g transform="translate(-12 -5)"><g class="wheel"><circle r="5.2" fill="#0D0D0D"/><circle r="2.4" fill="#C9D1D6"/><path d="M0-4.6V4.6M-4.6 0H4.6" stroke="#0D0D0D" stroke-width="1"/></g></g>
+    <g transform="translate(13 -5)"><g class="wheel"><circle r="5.2" fill="#0D0D0D"/><circle r="2.4" fill="#C9D1D6"/><path d="M0-4.6V4.6M-4.6 0H4.6" stroke="#0D0D0D" stroke-width="1"/></g></g>
+  </g></g></g></svg>`;
+}
+function goalRing(n,goal){
+  const C=150.8, f=Math.min(1,n/goal);
+  return `<div class="ring"><svg viewBox="0 0 58 58" aria-hidden="true"><defs><linearGradient id="gGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFC23D"/><stop offset="1" stop-color="#2BD47F"/></linearGradient></defs><circle class="trk" cx="29" cy="29" r="24" fill="none" stroke-width="6"/><circle class="val" cx="29" cy="29" r="24" fill="none" stroke-width="6" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${(C*(1-f)).toFixed(1)}" style="--off:${C}"/></svg><b>${Math.min(n,goal)}</b></div>`;
 }
 
 /* ---------- досягнення ---------- */
@@ -241,8 +262,14 @@ function recordAnswer(id,ok){
 const app=document.getElementById('app');
 let view='home', Z=null, LAST=null, G=null;
 function go(v){ if(Z&&Z.timer&&v!=='quiz'){clearInterval(Z.timer);} if(v!=='quiz') Z=null; if(v!=='game'&&G){G.alive=false;G=null;} view=v; render(); window.scrollTo(0,0); }
+// Анімація входу — лише коли змінився екран чи питання, а не на кожне перемальовування
+let enterKey=null;
 function render(){
   const V={home:vHome,examIntro:vExamIntro,topics:vTopics,quiz:vQuiz,result:vResult,ach:vAch,game:vGame}[view]||vHome;
+  const key=view==='quiz'&&Z?`quiz:${Z.mode}:${Z.start}:${Z.i}`:view;
+  if(key===enterKey) delete app.dataset.enter;
+  else app.dataset.enter=(view==='quiz'&&enterKey&&enterKey.startsWith(`quiz:${Z.mode}:${Z.start}:`))?'q':'view';
+  enterKey=key;
   app.innerHTML=V();
   if(view==='game') afterGameRender();
   syncTg();
@@ -263,20 +290,21 @@ function vHome(){
   const pct=Math.round(readiness()*100), lv=level(), st=displayStreak(), tn=todayCount(), goal=20;
   const mis=mistakesList().length, fav=S.fav.length, got=Object.keys(S.badges).length;
   const mar=Math.min(S.marathon,QB.length);
-  const streakTxt=st?`🔥 ${st} ${plural(st,'день','дні','днів')} поспіль`:'🔥 Почни серію сьогодні';
+  const streakTxt=st?`${st} ${plural(st,'день','дні','днів')} поспіль`:'Почни серію сьогодні';
+  const prev=LEVELS[lv.n-1][0], xpPct=lv.next?Math.round((S.xp-prev)/(lv.next-prev)*100):100;
   const nextTxt=lv.next?`${S.xp} / ${lv.next} XP`:`${S.xp} XP`;
   return `
   <header class="topbar">
     <div class="brand">${logoSvg()}<span>Зелена хвиля</span></div>
     <button class="iconbtn" data-act="sound" aria-label="${S.sound?'Вимкнути звук':'Увімкнути звук'}">${S.sound?ICON.soundOn:ICON.soundOff}</button>
   </header>
-  <section class="sign-panel"><div class="inner">
-    <p class="hello">${hello()}</p>
-    <div class="ready"><span class="big">${pct}%</span><span class="lbl">готовність до іспиту</span></div>
-    ${roadBar(pct)}
-    <div class="chips"><span class="chip">${streakTxt}</span><span class="chip">${lv.name}</span><span class="chip">${nextTxt}</span></div>
-  </div></section>
-  <div class="goal"><div class="goal-top"><span>${tn>=goal?'Ціль на сьогодні виконано':'Ціль на сьогодні'}</span><b>${Math.min(tn,goal)} з ${goal} питань</b></div><div class="bar"><i style="width:${Math.min(100,tn/goal*100)}%"></i></div></div>
+  <section class="hero">
+    <div class="hero-top"><p class="hello">${hello()}</p><span class="lvl">${lv.name}</span></div>
+    <div class="ready"><span class="big">${pct}%</span><span class="lbl">готовність<br>до іспиту</span></div>
+    ${waveRoad(pct)}
+    <div class="chips"><span class="chip"><span class="flame" aria-hidden="true">🔥</span>${streakTxt}</span><span class="chip">${nextTxt}<span class="xpbar" aria-hidden="true"><i style="width:${xpPct}%"></i></span></span></div>
+  </section>
+  <div class="goal">${goalRing(tn,goal)}<div class="goal-tx"><b>${tn>=goal?'Ціль на сьогодні виконано 🎉':'Ціль на сьогодні'}</b><span>${Math.min(tn,goal)} з ${goal} питань${tn>=goal?'':` · ще ${goal-tn}`}</span></div></div>
   <div class="stack">
     <button class="tile exam" data-act="examIntro"><span class="wrap">${signIcon(['bolt'])}<span class="tx"><span class="t">Пробний іспит</span><span class="d">20 питань, 20 хвилин, не більше 2 помилок</span></span>${ICON.chev}</span></button>
     <button class="tile" data-act="train">${signIcon(['route'])}<span class="tx"><span class="t">Тренування</span><span class="d">10 питань, спершу ті, що даються важче</span></span>${ICON.chev}</button>
@@ -350,7 +378,7 @@ function vQuiz(){
     ${hud?`<div class="hud">${hud}</div>`:''}</div>
   <article class="qcard">
     <div class="qcard-top"><span class="tag">${esc(SEC[qq.s].sh)}</span><button class="star ${isFav?'on':''}" data-act="fav" aria-label="${isFav?'Прибрати з обраного':'Додати в обране'}" aria-pressed="${isFav}">${ICON.star}</button></div>
-    ${qq.sign?`<div class="signbox">${signSvg(qq.sign)}</div>`:''}
+    ${qq.sign?`<div class="stage sign">${signSvg(qq.sign)}</div>`:sceneHtml(qq.id)}
     <h2 class="qtext">${esc(qq.q)}</h2>
     <div class="opts">${opts}</div>
     ${fb}
@@ -396,7 +424,7 @@ function vResult(){
     const why=R.passed?`${R.correct} з 20 правильно за ${fmtMin(R.time)}. +100 XP за складений іспит.`:R.reason==='time'?`Час вийшов. Правильних відповідей: ${R.correct}.`:R.reason==='mistakes'?`Три помилки — іспит зупинено на ${R.answered}-му питанні.`:`Правильних: ${R.correct} з 20.`;
     head=`<section class="plate ${R.passed?'pass':'fail'}"><div class="inner"><p class="plate-k">Пробний іспит</p><h1 class="plate-t">${R.passed?'Складено':'Не складено'}</h1><p>${why}</p></div></section>`;
   } else {
-    head=`<section class="plate neutral"><div class="inner"><p class="plate-k">${esc(modeTitleOf(R.mode,R.sec))}</p><h1 class="plate-t">${R.correct} з ${R.answered}</h1><p>правильних відповідей${R.xp?`, +${R.xp} XP`:''}</p></div></section>`;
+    head=`<section class="plate neutral"><div class="inner"><p class="plate-k">${esc(modeTitleOf(R.mode,R.sec))}</p><h1 class="plate-t">${R.correct} <span class="of">з</span> ${R.answered}</h1><p>правильних відповідей${R.xp?`, +${R.xp} XP`:''}</p></div></section>`;
   }
   const wrong=R.wrong.length?`<h2 class="h2">Де були помилки</h2>`+R.wrong.map(w=>`<div class="wcard"><p class="wq">${esc(w.q.q)}</p>${w.q.sign?`<div class="signbox" style="justify-content:flex-start;margin:4px 0">${signSvg(w.q.sign).replace('width="128" height="128"','width="64" height="64"')}</div>`:''}<p class="wa bad">Твоя відповідь: ${esc(w.picked)}</p><p class="wa ok">Правильно: ${esc(w.q.o[0])}</p></div>`).join(''):'';
   return `<div class="qtop"><button class="iconbtn" data-act="home" aria-label="На головну">${ICON.back}</button><div class="gtitle">Результат</div></div>
@@ -413,12 +441,12 @@ function vAch(){
   const acc=S.total.a?Math.round(S.total.c/S.total.a*100):0, lv=level();
   const badges=BADGES.map(b=>{const got=!!S.badges[b.id];return `<div class="badge ${got?'got':'locked'}"><div class="e" aria-hidden="true">${b.e}</div><b>${esc(b.t)}</b><span>${esc(b.d)}</span></div>`;}).join('');
   return `<div class="qtop"><button class="iconbtn" data-act="home" aria-label="На головну">${ICON.back}</button><div class="gtitle">Досягнення</div></div>
-  <section class="sign-panel"><div class="inner"><p class="hello">Рівень ${lv.n}</p><div class="ready"><span class="big" style="font-size:44px">${lv.name}</span></div><p class="hello" style="margin-top:6px">${S.xp} XP${lv.next?`, до наступного рівня ще ${lv.next-S.xp}`:', це максимальний рівень'}</p></div></section>
+  <section class="hero ach-hero"><div class="hero-top"><p class="hello">Рівень ${lv.n}</p><span class="lvl">${S.xp} XP</span></div><div class="ready"><span class="big">${lv.name}</span></div><p class="hello" style="margin-top:8px">${lv.next?`До наступного рівня ще ${lv.next-S.xp} XP`:'Це максимальний рівень'}</p></section>
   <h2 class="h2">Статистика</h2>
   <div class="stats">
     <div class="stat"><b>${S.total.a}</b><span>відповідей</span></div>
     <div class="stat"><b>${acc}%</b><span>точність</span></div>
-    <div class="stat"><b>${S.exams.passed} з ${S.exams.taken}</b><span>іспитів складено</span></div>
+    <div class="stat"><b>${S.exams.passed} <span class="of">з</span> ${S.exams.taken}</b><span>іспитів складено</span></div>
     <div class="stat"><b>${S.game.best}</b><span>рекорд на перехрестях</span></div>
   </div>
   <h2 class="h2">Нагороди</h2>

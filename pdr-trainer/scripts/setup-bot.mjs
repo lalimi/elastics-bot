@@ -29,6 +29,8 @@ await call('setWebhook', {
   drop_pending_updates: true
 });
 await call('setMyCommands', { commands: [{ command: 'start', description: 'Відкрити тренажер' }] });
+await call('setMyDescription', { description: '«Зелена хвиля» — особистий тренажер ПДР України: 850 питань за чинними правилами, пробний іспит на 20 хвилин, анімовані схеми до питань, гра на перехрестях і нагадування щовечора.' });
+await call('setMyShortDescription', { short_description: 'Тренажер ПДР: 850 питань, пробний іспит і анімовані схеми 🚦' });
 const menu = { type: 'web_app', text: 'Тренажер', web_app: { url: APP_URL } };
 if (ALLOWED_USER_ID) await call('setChatMenuButton', { chat_id: Number(ALLOWED_USER_ID), menu_button: menu });
 else console.log('setChatMenuButton: пропущено — спершу задай ALLOWED_USER_ID (id прийде на /start)');

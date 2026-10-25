@@ -1,4 +1,4 @@
-// Перевірка бази питань перед деплоєм: формат, унікальні id, розділи, малюнки знаків.
+// Перевірка бази питань перед деплоєм: формат, унікальні id, розділи, малюнки знаків, сцени до питань.
 // node scripts/check-questions.mjs
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -6,6 +6,8 @@ import vm from 'node:vm';
 const EXPECTED = 850;
 const file = new URL('../public/js/questions.js', import.meta.url);
 const { SEC_LIST, QB } = vm.runInNewContext(fs.readFileSync(file, 'utf8') + '\n;({SEC_LIST,QB})');
+const noMotion = () => ({ matches: false });
+const { SCN } = vm.runInNewContext(fs.readFileSync(new URL('../public/js/scenes.js', import.meta.url), 'utf8') + '\n;({SCN})', { window: { matchMedia: noMotion }, matchMedia: noMotion });
 
 const NS = [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 130];
 const SIGNS = new Set(['giveway', 'stop', 'main', 'endmain', 'notraffic', 'noentry', 'noright', 'noleft', 'nouturn', 'noovertake', 'endnoovertake', 'endall', 'nostopping', 'noparking', 'straight', 'right', 'left', 'straightright', 'straightleft', 'rightleft', 'keepright', 'keepleft', 'oneway', 'endoneway', 'parking', 'danger', 'crossroads', 'trafficlight', 'rail1', 'railmulti', 'speed40', ...NS.map(n => 'speed' + n), ...NS.map(n => 'endspeed' + n)]);
@@ -27,9 +29,17 @@ for (const x of QB) {
   if (texts.has(key)) errors.push(`${at}: дублює ${texts.get(key)}`); texts.set(key, x.id);
 }
 SEC_LIST.forEach(s => { if (!count[s.id]) errors.push(`розділ ${s.id} порожній`); });
+const byId = new Map(QB.map(x => [x.id, x]));
+for (const id of Object.keys(SCN.SCENES)) {
+  const x = byId.get(id);
+  if (!x) { errors.push(`сцена ${id}: немає такого питання`); continue; }
+  if (x.sign) errors.push(`сцена ${id}: у питання вже є знак`);
+  const html = SCN.html(id);
+  if (!html.includes('<svg') || /undefined|NaN/.test(html)) errors.push(`сцена ${id}: не малюється`);
+}
 if (QB.length !== EXPECTED) errors.push(`питань ${QB.length}, очікувалось ${EXPECTED}`);
 
-console.log(`Питань: ${QB.length}, розділів: ${SEC_LIST.length}`);
+console.log(`Питань: ${QB.length}, розділів: ${SEC_LIST.length}, сцен: ${Object.keys(SCN.SCENES).length}`);
 console.log(SEC_LIST.map(s => `  ${s.sh}: ${count[s.id] || 0}`).join('\n'));
 if (errors.length) { console.error('\nПомилки:\n' + errors.map(e => '  ' + e).join('\n')); process.exit(1); }
 console.log('OK');

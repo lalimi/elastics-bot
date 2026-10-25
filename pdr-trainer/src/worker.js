@@ -67,11 +67,15 @@ async function webhook(req, env, url) {
   if (String(msg.from.id) !== String(env.ALLOWED_USER_ID)) return status(200); // чужим не відповідаємо
 
   const app = await appUrl(env, url);
+  const welcome = 'Привіт! Це «Зелена хвиля» — тренажер ПДР. Тисни кнопку, щоб почати. Щовечора о 19:00 нагадаю, якщо день ще без практики.';
+  // На /start — анімація з public/bot/welcome.mp4; якщо Telegram не зміг її взяти, просто текст
+  if (isStart) {
+    const r = await tg(env, 'sendAnimation', { chat_id: msg.chat.id, animation: app + 'bot/welcome.mp4', caption: welcome, reply_markup: openButton(app) });
+    if (r.ok) return status(200);
+  }
   await tg(env, 'sendMessage', {
     chat_id: msg.chat.id,
-    text: isStart
-      ? 'Привіт! Це «Зелена хвиля» — тренажер ПДР. Тисни кнопку, щоб почати. Щовечора о 19:00 нагадаю, якщо день ще без практики.'
-      : 'Тренажер відкривається кнопкою нижче або «Тренажер» біля поля вводу.',
+    text: isStart ? welcome : 'Тренажер відкривається кнопкою нижче або «Тренажер» біля поля вводу.',
     reply_markup: openButton(app)
   });
   return status(200);
