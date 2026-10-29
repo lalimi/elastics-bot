@@ -8,6 +8,7 @@
 //                      поки не заданий, бот лише показує id на /start
 // KV:  activity:<id> = {day, streak, at}, reminded:<id> = дата останнього нагадування, origin = адреса застосунку
 //      (activity і reminded без id — ключі з часів, коли користувачка була одна; читаються для першого id)
+//      upload:last = {file_id, file_name, file_size, from, at} — останній файл, надісланий боту (для імпорту матеріалів)
 
 import { verifyInitData, kyivNow, reminderText, REMIND_FROM, REMIND_UNTIL } from './lib.js';
 
@@ -79,6 +80,14 @@ async function webhook(req, env, url) {
     return status(200);
   }
 
+  // Файл від користувача (напр. PDF з офіційними питаннями) — запам’ятовуємо, щоб забрати через getFile
+  if (msg.document) {
+    const d = msg.document;
+    await env.KV.put('upload:last', JSON.stringify({ file_id: d.file_id, file_name: d.file_name || '', file_size: d.file_size || 0, from: msg.from.id, at: Date.now() }));
+    const mb = ((d.file_size || 0) / 1048576).toFixed(1);
+    await tg(env, 'sendMessage', { chat_id: msg.chat.id, text: `Файл отримано: ${d.file_name || 'без назви'} (${mb} МБ).` });
+    return status(200);
+  }
   const app = await appUrl(env, url);
   const welcome = 'Привіт! Це «Зелена хвиля» — тренажер ПДР. Тисни кнопку, щоб почати. Щовечора о 19:00 нагадаю, якщо день ще без практики.';
   // На /start — анімація з public/bot/welcome.mp4; якщо Telegram не зміг її взяти, просто текст

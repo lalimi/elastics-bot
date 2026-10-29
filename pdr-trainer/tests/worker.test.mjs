@@ -87,6 +87,17 @@ test('webhook: кілька користувачів через кому — к�
   assert.deepEqual(sent.map(x => [x.url.split('/').pop(), x.body.chat_id]), [['sendAnimation', OWNER], ['sendAnimation', 888002]]);
 });
 
+test('webhook: файл від користувача запам’ятовується в KV, від чужих — ні', async () => {
+  const env = makeEnv(); sent = [];
+  const doc = (from) => ({ update_id: 2, message: { message_id: 2, from: { id: from }, chat: { id: from, type: 'private' }, document: { file_id: 'F1', file_name: 'q.pdf', file_size: 3145728 } } });
+  await worker.fetch(post('/webhook', doc(999), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
+  assert.equal(env.store.get('upload:last'), undefined);
+  await worker.fetch(post('/webhook', doc(OWNER), { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
+  const u = JSON.parse(env.store.get('upload:last'));
+  assert.deepEqual([u.file_id, u.file_name, u.file_size, u.from], ['F1', 'q.pdf', 3145728, OWNER]);
+  assert.equal(sent.at(-1).body.text, 'Файл отримано: q.pdf (3.0 МБ).');
+});
+
 test('webhook: якщо анімація не надіслалась — привітання текстом', async () => {
   const env = makeEnv(); const calls = [];
   const realFetch = globalThis.fetch;
