@@ -56,7 +56,26 @@ for (const id of Object.keys(SCN.SCENES)) {
 }
 if (QB.length !== EXPECTED) errors.push(`питань ${QB.length}, очікувалось ${EXPECTED}`);
 
-console.log(`Питань: ${QB.length}, розділів: ${SEC_LIST.length}, сцен: ${Object.keys(SCN.SCENES).length}`);
+// офіційна база ГСЦ (public/js/official.js): формат, унікальність, правильна відповідь серед варіантів, малюнки на місці
+const octx = { window: {} };
+vm.runInNewContext(fs.readFileSync(new URL('../public/js/official.js', import.meta.url), 'utf8'), octx);
+const OFF = octx.window.OFFICIAL;
+const OFF_EXPECTED = 1762;
+const oseen = new Set(), osecs = new Set(OFF.secs.map(x => x[0])), ocount = {};
+for (const [s, n, q, o, c, img] of OFF.q) {
+  const at = `ГСЦ ${s}/${n}`;
+  if (oseen.has(s + '/' + n)) errors.push(`${at}: повтор`); oseen.add(s + '/' + n);
+  if (!osecs.has(s)) errors.push(`${at}: невідомий розділ`);
+  ocount[s] = (ocount[s] || 0) + 1;
+  if (!q || !q.trim()) errors.push(`${at}: порожнє питання`);
+  if (!Array.isArray(o) || o.length < 2 || o.some(x => !x || !x.trim())) errors.push(`${at}: погані варіанти`);
+  if (!(Number.isInteger(c) && c >= 0 && c < o.length)) errors.push(`${at}: правильна відповідь поза варіантами`);
+  if (img && !fs.existsSync(new URL('../public/off/' + img, import.meta.url))) errors.push(`${at}: немає малюнка ${img}`);
+}
+OFF.secs.forEach(([s]) => { const ns = OFF.q.filter(x => x[0] === s).map(x => x[1]); if (ns.some((n, i) => n !== i + 1)) errors.push(`ГСЦ розділ ${s}: нумерація з пропусками`); });
+if (OFF.q.length !== OFF_EXPECTED) errors.push(`офіційних питань ${OFF.q.length}, очікувалось ${OFF_EXPECTED}`);
+
+console.log(`Питань: ${QB.length}, розділів: ${SEC_LIST.length}, сцен: ${Object.keys(SCN.SCENES).length}; офіційних ГСЦ: ${OFF.q.length} у ${OFF.secs.length} розділах, з малюнками ${OFF.q.filter(x => x[5]).length}`);
 console.log(SEC_LIST.map(s => `  ${s.sh}: ${count[s.id] || 0}`).join('\n'));
 if (errors.length) { console.error('\nПомилки:\n' + errors.map(e => '  ' + e).join('\n')); process.exit(1); }
 console.log('OK');

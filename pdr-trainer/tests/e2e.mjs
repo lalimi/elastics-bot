@@ -21,7 +21,7 @@ const LIGHT = { bg_color: '#ffffff', text_color: '#000000', hint_color: '#999999
 
 /* ---------- сервер: статичні файли + справжній Worker (як у Cloudflare) ---------- */
 const kv = new Map();
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.webp': 'image/webp' };
 function serveStatic(p) {
   if (p.endsWith('/')) p += 'index.html';
   const f = path.join(ROOT, path.normalize(decodeURIComponent(p)));
@@ -167,6 +167,38 @@ test('пояснення простими словами: після помил�
   assert.equal(await page.locator('.feedback .plain').isVisible(), true);
   await next(page);
   assert.equal(await page.locator('.wcard .wa.hint').textContent(), '💡 ' + hook);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('офіційні білети ГСЦ: варіанти в офіційному порядку, відповідь за ключем, малюнки, повернення до білетів', async () => {
+  const { page, context, errors } = await open();
+  await page.click('[data-act="off"]');
+  await page.waitForSelector('[data-act="offExam"]');
+  const total = await page.evaluate(() => OFF.list.length);
+  assert.equal(total, 1762);
+  assert.equal(await page.locator('.row[data-act="offTopic"]').count(), await page.evaluate(() => OFF.secs.length));
+  await page.click('[data-act="offExam"]');
+  assert.equal(await page.locator('.qmeta span').nth(1).textContent(), '1 з 20');
+  const st = await page.evaluate(() => ({ off: Z.off, order: Z.order, n: Z.list[Z.i].o.length, c: Z.list[Z.i].c }));
+  assert.equal(st.off, true);
+  assert.deepEqual(st.order, [...Array(st.n).keys()], 'варіанти не перемішані');
+  assert.equal(await page.locator('.qcard .star').count(), 0);
+  await page.click(`.opt[data-arg="${st.c}"]`);
+  assert.equal(await page.locator('.feedback b').textContent(), 'Правильно');
+  await page.evaluate(() => go('off'));
+  // розділ із малюнками: перше питання показує малюнок, він реально завантажується
+  const sec = await page.evaluate(() => OFF.list.find(x => x.img).s);
+  await page.click(`.row[data-arg="${sec}"]`);
+  await page.evaluate(() => { const i = Z.list.findIndex(x => x.img); Z.i = i; Z.order = null; render(); });
+  await page.waitForFunction(() => { const im = document.querySelector('.stage.photo img'); return im && im.complete && im.naturalWidth > 0; });
+  const wrong = await page.evaluate(() => Z.order.findIndex(i => i !== Z.list[Z.i].c));
+  await page.click(`.opt[data-arg="${wrong}"]`);
+  assert.equal(await page.locator('.feedback b').textContent(), 'Неправильно');
+  assert.equal(await page.locator('.opt.correct').getAttribute('data-arg'), String(await page.evaluate(() => Z.list[Z.i].c)));
+  await page.click('[data-act="quitQuiz"]');
+  assert.equal(await page.evaluate(() => view), 'off', 'вихід з офіційного — до білетів ГСЦ');
+  assert.ok(await page.evaluate(() => Object.keys(S.q).some(id => /^o/.test(id))));
   assert.deepEqual(errors, []);
   await context.close();
 });

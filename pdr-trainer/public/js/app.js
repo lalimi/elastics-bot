@@ -20,7 +20,7 @@ let S=defaults();
 try{const raw=localStorage.getItem(LS_KEY); if(raw) S=normalize(JSON.parse(raw));}catch(e){}
 
 const userName=TG.firstName;
-const secOf=id=>QMAP[id]&&QMAP[id].s;
+const secOf=id=>QMAP[id]?QMAP[id].s:/^o\d/.test(id)?'off':undefined; // офіційні питання ГСЦ — окремий кошик у хмарі
 let saveTimer=null, saving=false, dirty=false, cloudLast=null, cloudFails=0;
 function save(){
   S.updatedAt=Date.now();
@@ -141,6 +141,7 @@ function signIcon(ic){
     case 'route':return `<svg ${W}><rect x="2" y="2" width="36" height="36" rx="7" fill="#137A47"/><rect x="5" y="5" width="30" height="30" rx="4.5" fill="none" stroke="#fff" stroke-width="1.6"/><path d="M20 30V18m0 0l-6-6m6 6l6-6M14 12v4M14 12h4M26 12v4M26 12h-4" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     case 'redo':return `<svg ${W}><circle cx="20" cy="20" r="18" fill="#C23131"/><path d="M27 15a8 8 0 10.8 8" stroke="#fff" stroke-width="2.8" fill="none" stroke-linecap="round"/><path d="M28 9v6h-6" stroke="#fff" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     case 'fav':return `<svg ${W}><circle cx="20" cy="20" r="18" fill="#F2B705"/><path d="M20 9.5l3 6.3 6.9.9-5 4.7 1.3 6.8L20 25l-6.2 3.2 1.3-6.8-5-4.7 6.9-.9z" fill="#fff"/></svg>`;
+    case 'doc':return `<svg ${W}><rect x="2" y="2" width="36" height="36" rx="9" fill="#137A47"/><path d="M12 7h11l6 6v20H12z" fill="#fff"/><path d="M23 7v6h6" fill="#CFE9DA"/><path d="M15.5 23.5l3 3 6-6.5" stroke="#137A47" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 15h8M15.5 18.5h5" stroke="#9CCFB2" stroke-width="1.8" stroke-linecap="round"/></svg>`;
     case 'bolt':return `<svg ${W}><circle cx="20" cy="20" r="18" fill="#1D5DBF"/><path d="M22 7l-9 15h6l-2 11 9-15h-6z" fill="#fff"/></svg>`;
     case 'motorway':return `<svg ${W}><rect x="2" y="2" width="36" height="36" rx="7" fill="#137A47"/><rect x="5" y="5" width="30" height="30" rx="4.5" fill="none" stroke="#fff" stroke-width="1.6"/><path d="M13 32l4-18M27 32l-4-18M9 19h22" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>`;
     case 'truck':return `<svg ${W}><rect x="2" y="2" width="36" height="36" rx="7" fill="#1D5DBF"/><rect x="7" y="13" width="17" height="12" rx="1.5" fill="#fff"/><path d="M25 17h5l3.5 4.5V25H25z" fill="#fff"/><circle cx="12" cy="28" r="3" fill="#fff" stroke="#1D5DBF" stroke-width="1.4"/><circle cx="29" cy="28" r="3" fill="#fff" stroke="#1D5DBF" stroke-width="1.4"/></svg>`;
@@ -268,7 +269,7 @@ function go(v){ if(Z&&Z.timer&&v!=='quiz'){clearInterval(Z.timer);} if(v!=='quiz
 // Анімація входу — лише коли змінився екран чи питання, а не на кожне перемальовування
 let enterKey=null;
 function render(){
-  const V={home:vHome,examIntro:vExamIntro,topics:vTopics,quiz:vQuiz,result:vResult,ach:vAch,game:vGame}[view]||vHome;
+  const V={home:vHome,examIntro:vExamIntro,topics:vTopics,quiz:vQuiz,result:vResult,ach:vAch,game:vGame,off:vOff}[view]||vHome;
   const key=view==='quiz'&&Z?`quiz:${Z.mode}:${Z.start}:${Z.i}`:view;
   if(key===enterKey) delete app.dataset.enter;
   else app.dataset.enter=(view==='quiz'&&enterKey&&enterKey.startsWith(`quiz:${Z.mode}:${Z.start}:`))?'q':'view';
@@ -285,7 +286,7 @@ function syncTg(){
 }
 function tgBack(){
   const sheet=document.querySelector('.backdrop'); if(sheet){ sheet.remove(); return; } // як «Скасувати»
-  if(view==='quiz') ACT.quitQuiz(); else go('home');
+  if(view==='quiz') ACT.quitQuiz(); else go(view==='result'&&LAST&&LAST.off?'off':'home');
 }
 
 /* ---------- головна ---------- */
@@ -310,6 +311,7 @@ function vHome(){
   <div class="goal">${goalRing(tn,goal)}<div class="goal-tx"><b>${tn>=goal?'Ціль на сьогодні виконано 🎉':'Ціль на сьогодні'}</b><span>${Math.min(tn,goal)} з ${goal} питань${tn>=goal?'':` · ще ${goal-tn}`}</span></div></div>
   <div class="stack">
     <button class="tile exam" data-act="examIntro"><span class="wrap">${signIcon(['bolt'])}<span class="tx"><span class="t">Пробний іспит</span><span class="d">20 питань, 20 хвилин, не більше 2 помилок</span></span>${ICON.chev}</span></button>
+    <button class="tile" data-act="off">${signIcon(['doc'])}<span class="tx"><span class="t">Офіційні білети ГСЦ</span><span class="d">Питання з бази сервісного центру МВС — дослівно, як на іспиті</span></span>${ICON.chev}</button>
     <button class="tile" data-act="train">${signIcon(['route'])}<span class="tx"><span class="t">Тренування</span><span class="d">10 питань, спершу ті, що даються важче</span></span>${ICON.chev}</button>
     <div class="grid2">
       <button class="tile col" data-act="topics">${signIcon(['sq','і'])}<span><span class="t">Розділи</span><span class="d">${SEC_LIST.length} тем</span></span></button>
@@ -344,12 +346,13 @@ function vTopics(){
 
 /* ---------- квіз ---------- */
 const MODE_T={exam:'Іспит',marathon:'Марафон',mistakes:'Робота над помилками',favs:'Обране',train:'Тренування'};
+const corOf=qq=>qq.c||0; // індекс правильного варіанта: у власних питаннях — перший, в офіційних — за ключем ГСЦ
 function modeTitleOf(m,sec){return m==='topic'?(SEC[sec]?SEC[sec].sh:'Розділ'):MODE_T[m]||'';}
 function startQuiz(mode,list,opts){
   opts=opts||{};
   if(!list.length){ toast(mode==='mistakes'?'Тут з’являться питання, в яких була помилка.':mode==='favs'?'Познач питання зірочкою, і воно з’явиться тут.':'Немає питань.'); return; }
   if(Z&&Z.timer) clearInterval(Z.timer);
-  Z={mode,list,i:opts.startAt||0,picked:null,order:null,combo:0,correct:0,mistakes:0,wrong:[],start:Date.now(),limit:mode==='exam'?20*60:0,xp:0,sec:opts.sec||null,timer:null};
+  Z={mode,list,i:opts.startAt||0,picked:null,order:null,combo:0,correct:0,mistakes:0,wrong:[],start:Date.now(),limit:mode==='exam'?20*60:0,xp:0,sec:opts.sec||null,timer:null,off:!!opts.off,title:opts.title||null};
   view='quiz'; render(); window.scrollTo(0,0);
   if(mode==='exam') Z.timer=setInterval(tickExam,1000);
 }
@@ -361,27 +364,28 @@ function tickExam(){
   if(r<=0) finishQuiz('time');
 }
 function vQuiz(){
-  const qq=Z.list[Z.i]; if(!Z.order) Z.order=shuffle(qq.o.map((_,i)=>i));
+  const qq=Z.list[Z.i]; if(!Z.order) Z.order=qq.fixed?qq.o.map((_,i)=>i):shuffle(qq.o.map((_,i)=>i)); // офіційні — в офіційному порядку
+  const nx=Z.list[Z.i+1]; if(nx&&nx.img) new Image().src=nx.img;
   const total=Z.list.length, answered=Z.picked!==null, isFav=S.fav.includes(qq.id);
   let hud='';
   if(Z.mode==='exam'){ const r=remaining(); hud=`<span class="chip-s ${r<=120?'low':''}" id="timer" aria-label="Залишилось часу">${fmt(r)}</span><span class="marks" aria-label="Помилок: ${Z.mistakes} з 2 дозволених">${[0,1].map(i=>`<i class="${i<Z.mistakes?'on':''}"></i>`).join('')}</span>`; }
   else if(Z.combo>=3){ hud=`<span class="chip-s combo" aria-label="Серія правильних відповідей">🔥 ${Z.combo}</span>`; }
-  const opts=Z.order.map((oi,k)=>{let cls='opt',mark=k+1;if(answered){if(oi===0){cls+=' correct';mark=ICON.ok;}else if(k===Z.picked){cls+=' wrong';mark=ICON.no;}else cls+=' dim';}
+  const opts=Z.order.map((oi,k)=>{let cls='opt',mark=k+1;if(answered){if(oi===corOf(qq)){cls+=' correct';mark=ICON.ok;}else if(k===Z.picked){cls+=' wrong';mark=ICON.no;}else cls+=' dim';}
     return `<button class="${cls}" data-act="ans" data-arg="${k}" ${answered?'disabled':''}><span class="n">${mark}</span><span>${esc(qq.o[oi])}</span></button>`;}).join('');
   let fb='';
   if(answered){
-    const ok=Z.order[Z.picked]===0, failNow=Z.mode==='exam'&&Z.mistakes>=3;
+    const ok=Z.order[Z.picked]===corOf(qq), failNow=Z.mode==='exam'&&Z.mistakes>=3;
     const last=Z.i+1>=total;
     const label=failNow?'До результатів':last?'Завершити':'Далі';
     fb=feedbackHtml(qq,ok,failNow)+`<button class="btn" data-act="next" id="nextBtn">${label}</button>`;
   }
   const num=Z.i+1;
   return `<div class="qtop"><button class="iconbtn" data-act="quitQuiz" aria-label="Вийти">${ICON.close}</button>
-    <div class="qprog"><div class="qmeta"><span>${esc(modeTitleOf(Z.mode,Z.sec))}</span><span>${num} з ${total}</span></div><div class="bar"><i style="width:${(Z.i+(answered?1:0))/total*100}%"></i></div></div>
+    <div class="qprog"><div class="qmeta"><span>${esc(Z.title||modeTitleOf(Z.mode,Z.sec))}</span><span>${num} з ${total}</span></div><div class="bar"><i style="width:${(Z.i+(answered?1:0))/total*100}%"></i></div></div>
     ${hud?`<div class="hud">${hud}</div>`:''}</div>
   <article class="qcard">
-    <div class="qcard-top"><span class="tag">${esc(SEC[qq.s].sh)}</span><button class="star ${isFav?'on':''}" data-act="fav" aria-label="${isFav?'Прибрати з обраного':'Додати в обране'}" aria-pressed="${isFav}">${ICON.star}</button></div>
-    ${qq.sign?`<div class="stage sign">${signSvg(qq.sign)}</div>`:sceneHtml(qq.id)}
+    <div class="qcard-top"><span class="tag">${esc(qq.tag||SEC[qq.s].sh)}</span>${qq.off?'':`<button class="star ${isFav?'on':''}" data-act="fav" aria-label="${isFav?'Прибрати з обраного':'Додати в обране'}" aria-pressed="${isFav}">${ICON.star}</button>`}</div>
+    ${qq.sign?`<div class="stage sign">${signSvg(qq.sign)}</div>`:qq.img?`<div class="stage photo"><img src="${qq.img}" width="${qq.iw}" height="${qq.ih}" alt="Малюнок до питання" decoding="async"></div>`:sceneHtml(qq.id)}
     <h2 class="qtext">${esc(qq.q)}</h2>
     <div class="opts">${opts}</div>
     ${fb}
@@ -406,7 +410,7 @@ function loadExplain(){
   const s=document.createElement('script'); s.src='js/explain.js';
   s.onload=()=>{ // якщо картка з помилкою вже на екрані — доповнюємо її
     const el=document.querySelector('.qcard .feedback[data-q]');
-    if(el&&view==='quiz'&&Z&&Z.picked!==null){ const qq=Z.list[Z.i]; el.outerHTML=feedbackHtml(qq,Z.order[Z.picked]===0,Z.mode==='exam'&&Z.mistakes>=3); }
+    if(el&&view==='quiz'&&Z&&Z.picked!==null){ const qq=Z.list[Z.i]; el.outerHTML=feedbackHtml(qq,Z.order[Z.picked]===corOf(qq),Z.mode==='exam'&&Z.mistakes>=3); }
   };
   s.onerror=()=>{ explainLoading=false; };
   document.head.appendChild(s);
@@ -414,7 +418,7 @@ function loadExplain(){
 function answer(k){
   if(!Z||Z.picked!==null) return;
   const qq=Z.list[Z.i]; if(k<0||k>=qq.o.length) return;
-  Z.picked=k; const ok=Z.order[k]===0;
+  Z.picked=k; const ok=Z.order[k]===corOf(qq);
   recordAnswer(qq.id,ok);
   if(ok){ Z.combo++; Z.correct++; const gain=10+Math.min(10,(Z.combo-1)*2); S.xp+=gain; Z.xp+=gain; S.bestCombo=Math.max(S.bestCombo,Z.combo); sfx('ok'); TG.haptic('success'); xpFloat('+'+gain+' XP'); }
   else { loadExplain(); Z.combo=0; Z.mistakes++; Z.wrong.push({q:qq,picked:qq.o[Z.order[k]]}); sfx('bad'); buzz(); }
@@ -433,7 +437,7 @@ function finishQuiz(reason){
   if(!Z) return;
   if(Z.timer){clearInterval(Z.timer);Z.timer=null;}
   const answeredN=Z.i+(Z.picked!==null?1:0);
-  const R={mode:Z.mode,sec:Z.sec,total:Z.list.length,answered:answeredN,correct:Z.correct,mistakes:Z.mistakes,wrong:Z.wrong,time:Math.round((Date.now()-Z.start)/1000),reason,xp:Z.xp,passed:false};
+  const R={mode:Z.mode,sec:Z.sec,total:Z.list.length,answered:answeredN,correct:Z.correct,mistakes:Z.mistakes,wrong:Z.wrong,time:Math.round((Date.now()-Z.start)/1000),reason,xp:Z.xp,passed:false,off:Z.off,title:Z.title};
   if(Z.mode==='exam'){
     R.passed=reason==='end'&&Z.mistakes<=2;
     S.exams.taken++; S.exams.best=Math.max(S.exams.best||0,Z.correct);
@@ -449,16 +453,17 @@ function vResult(){
   let head;
   if(R.mode==='exam'){
     const why=R.passed?`${R.correct} з 20 правильно за ${fmtMin(R.time)}. +100 XP за складений іспит.`:R.reason==='time'?`Час вийшов. Правильних відповідей: ${R.correct}.`:R.reason==='mistakes'?`Три помилки — іспит зупинено на ${R.answered}-му питанні.`:`Правильних: ${R.correct} з 20.`;
-    head=`<section class="plate ${R.passed?'pass':'fail'}"><div class="inner"><p class="plate-k">Пробний іспит</p><h1 class="plate-t">${R.passed?'Складено':'Не складено'}</h1><p>${why}</p></div></section>`;
+    head=`<section class="plate ${R.passed?'pass':'fail'}"><div class="inner"><p class="plate-k">${R.off?'Іспит за білетами ГСЦ':'Пробний іспит'}</p><h1 class="plate-t">${R.passed?'Складено':'Не складено'}</h1><p>${why}</p></div></section>`;
   } else {
-    head=`<section class="plate neutral"><div class="inner"><p class="plate-k">${esc(modeTitleOf(R.mode,R.sec))}</p><h1 class="plate-t">${R.correct} <span class="of">з</span> ${R.answered}</h1><p>правильних відповідей${R.xp?`, +${R.xp} XP`:''}</p></div></section>`;
+    head=`<section class="plate neutral"><div class="inner"><p class="plate-k">${esc(R.title||modeTitleOf(R.mode,R.sec))}</p><h1 class="plate-t">${R.correct} <span class="of">з</span> ${R.answered}</h1><p>правильних відповідей${R.xp?`, +${R.xp} XP`:''}</p></div></section>`;
   }
-  const wrong=R.wrong.length?`<h2 class="h2">Де були помилки</h2>`+R.wrong.map(w=>`<div class="wcard"><p class="wq">${esc(w.q.q)}</p>${w.q.sign?`<div class="signbox" style="justify-content:flex-start;margin:4px 0">${signSvg(w.q.sign).replace('width="128" height="128"','width="64" height="64"')}</div>`:''}<p class="wa bad">Твоя відповідь: ${esc(w.picked)}</p><p class="wa ok">Правильно: ${esc(w.q.o[0])}</p>${plainOf(w.q.id)?`<p class="wa hint">💡 ${esc(plainOf(w.q.id)[1])}</p>`:''}</div>`).join(''):'';
+  const wrong=R.wrong.length?`<h2 class="h2">Де були помилки</h2>`+R.wrong.map(w=>`<div class="wcard"><p class="wq">${esc(w.q.q)}</p>${w.q.img?`<img class="wimg" src="${w.q.img}" alt="" loading="lazy">`:''}${w.q.sign?`<div class="signbox" style="justify-content:flex-start;margin:4px 0">${signSvg(w.q.sign).replace('width="128" height="128"','width="64" height="64"')}</div>`:''}<p class="wa bad">Твоя відповідь: ${esc(w.picked)}</p><p class="wa ok">Правильно: ${esc(w.q.o[corOf(w.q)])}</p>${plainOf(w.q.id)?`<p class="wa hint">💡 ${esc(plainOf(w.q.id)[1])}</p>`:''}</div>`).join(''):'';
   return `<div class="qtop"><button class="iconbtn" data-act="home" aria-label="На головну">${ICON.back}</button><div class="gtitle">Результат</div></div>
   ${head}${wrong}
   <div class="stack" style="margin-top:18px">
-    ${R.mode==='exam'?'<button class="btn" data-act="startExam">Ще один іспит</button>':''}
-    ${mistakesList().length?'<button class="btn secondary" data-act="mistakes">Розібрати помилки</button>':''}
+    ${R.mode==='exam'?`<button class="btn" data-act="${R.off?'offExam':'startExam'}">Ще один іспит</button>`:''}
+    ${R.off?(offMistakes().length?'<button class="btn secondary" data-act="offMistakes">Розібрати помилки</button>':'')+'<button class="btn secondary" data-act="off">До білетів ГСЦ</button>'
+      :mistakesList().length?'<button class="btn secondary" data-act="mistakes">Розібрати помилки</button>':''}
     <button class="btn secondary" data-act="home">На головну</button>
   </div>`;
 }
@@ -667,6 +672,44 @@ function gameOverHtml(){
   return `<div class="over"><p class="ghint">Перехресть пройдено</p><div class="big">${G.score}</div><p class="gmode" style="margin-top:4px">${G.score>=S.game.best&&G.score>0?'Новий рекорд!':`Рекорд: ${S.game.best}`}</p><div class="stack"><button class="btn" data-act="game">Грати знову</button><button class="btn secondary" data-act="home">На головну</button></div></div>`;
 }
 
+/* ---------- офіційні білети ГСЦ (js/official.js — підвантажується, коли потрібен) ---------- */
+let OFF=null, offLoading=false, offWaiters=[];
+function loadOfficial(cb){
+  if(!OFF&&window.OFFICIAL) initOfficial();
+  if(OFF){ if(cb) cb(); return; }
+  if(cb) offWaiters.push(cb);
+  if(offLoading) return; offLoading=true;
+  const s=document.createElement('script'); s.src='js/official.js';
+  s.onload=()=>{ offLoading=false; initOfficial(); const w=offWaiters; offWaiters=[]; w.forEach(f=>f()); };
+  s.onerror=()=>{ offLoading=false; offWaiters=[]; toast('Не вдалося завантажити офіційні питання. Перевір інтернет.'); };
+  document.head.appendChild(s);
+}
+function initOfficial(){
+  const O=window.OFFICIAL;
+  const list=O.q.map(([s,n,q,o,c,img,w,h])=>Object.assign({id:'o'+s.replace('.','_')+'-'+n,s,n,q,o,c,fixed:true,off:true,tag:'ГСЦ · розділ '+s},img?{img:'off/'+img,iw:w,ih:h}:{}));
+  const by={}; list.forEach(x=>{(by[x.s]=by[x.s]||[]).push(x);});
+  OFF={src:O.src,secs:O.secs.map(([id,t])=>({id,t})),list,by};
+}
+function offMistakes(){ return OFF?OFF.list.filter(x=>{const st=S.q[x.id];return st&&st.w>0&&st.s<2;}):[]; }
+function vOff(){
+  const top=`<div class="qtop"><button class="iconbtn" data-act="home" aria-label="На головну">${ICON.back}</button><div class="gtitle">Офіційні білети ГСЦ</div></div>`;
+  if(!OFF){ loadOfficial(()=>{ if(view==='off') render(); }); return top+'<p class="note" style="text-align:center">Завантажую офіційні питання…</p>'; }
+  const pct=Math.round(readiness(OFF.list)*100), mis=offMistakes().length;
+  const rows=OFF.secs.map(s=>{const l=OFF.by[s.id]||[], p=Math.round(readiness(l)*100);
+    return `<button class="row" data-act="offTopic" data-arg="${s.id}"><span class="secno">${s.id}</span><span class="rt"><b>${esc(s.t)}</b><small>${l.length} ${plural(l.length,'питання','питання','питань')}</small><span class="bar"><i style="width:${p}%"></i></span></span><span class="pct">${p}%</span></button>`;}).join('');
+  return `${top}
+  <section class="hero"><p class="hello">${esc(OFF.src)}</p><div class="ready"><span class="big">${pct}%</span><span class="lbl">готовність<br>за базою ГСЦ</span></div><p class="hello" style="margin-top:8px">${OFF.list.length} питань для категорії B — дослівно, з малюнками й варіантами в офіційному порядку.</p></section>
+  <div class="stack">
+    <button class="tile exam" data-act="offExam"><span class="wrap">${signIcon(['bolt'])}<span class="tx"><span class="t">Іспит як у сервісному центрі</span><span class="d">20 офіційних питань, 20 хвилин, не більше 2 помилок</span></span>${ICON.chev}</span></button>
+    <div class="grid2">
+      <button class="tile col" data-act="offTrain">${signIcon(['route'])}<span><span class="t">Тренування</span><span class="d">10 питань, спершу ті, що даються важче</span></span></button>
+      <button class="tile col" data-act="offMistakes">${signIcon(['redo'])}<span><span class="t">Помилки</span><span class="d">${mis?`${mis} ${plural(mis,'питання','питання','питань')} на розбір`:'Поки чисто'}</span></span></button>
+    </div>
+  </div>
+  <h2 class="h2">Розділи</h2><div class="rows">${rows}</div>
+  <p class="note">Питання, малюнки й правильні відповіді — з офіційних документів ГСЦ МВС (${esc(OFF.src)}). Пояснень в офіційній базі немає.</p>`;
+}
+
 /* ---------- добір питань ---------- */
 function pickExam(){
   // по кілька питань з кожного розділу, щоб іспит покривав усі теми
@@ -675,9 +718,9 @@ function pickExam(){
   while(out.length<20&&r<20){ per.forEach(list=>{ if(out.length<20&&list[r]) out.push(list[r]); }); r++; }
   return shuffle(out);
 }
-function pickTrain(){
+function pickTrain(pool){
   const key=x=>{const st=S.q[x.id];if(!st)return 1;if(st.s===0)return 0;if(st.s===1)return 2;return 3;};
-  return shuffle(QB.map(x=>({x,k:key(x)+Math.random()*0.9})).sort((a,b)=>a.k-b.k).slice(0,10).map(o=>o.x));
+  return shuffle((pool||QB).map(x=>({x,k:key(x)+Math.random()*0.9})).sort((a,b)=>a.k-b.k).slice(0,10).map(o=>o.x));
 }
 
 /* ---------- оверлеї ---------- */
@@ -713,6 +756,11 @@ const ACT={
   examIntro:()=>go('examIntro'),
   startExam:()=>startQuiz('exam',pickExam()),
   train:()=>startQuiz('train',pickTrain()),
+  off:()=>go('off'),
+  offExam:()=>loadOfficial(()=>startQuiz('exam',shuffle(OFF.list).slice(0,20),{off:true,title:'Іспит ГСЦ'})),
+  offTrain:()=>loadOfficial(()=>startQuiz('train',pickTrain(OFF.list),{off:true,title:'Тренування ГСЦ'})),
+  offMistakes:()=>loadOfficial(()=>startQuiz('mistakes',shuffle(offMistakes()),{off:true,title:'Помилки ГСЦ'})),
+  offTopic:a=>loadOfficial(()=>startQuiz('topic',OFF.by[a]||[],{off:true,sec:a,title:'ГСЦ · розділ '+a})),
   topics:()=>go('topics'),
   topic:a=>startQuiz('topic',shuffle(BYSEC[a]||[]),{sec:a}),
   marathon:()=>startQuiz('marathon',QB,{startAt:S.marathon<QB.length?S.marathon:0}),
@@ -724,9 +772,9 @@ const ACT={
   next:()=>nextQ(),
   fav:()=>{ if(!Z) return; const id=Z.list[Z.i].id; const k=S.fav.indexOf(id); if(k>=0)S.fav.splice(k,1); else S.fav.push(id); save();
     const b=document.querySelector('.star'); if(b){const on=k<0;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on);b.setAttribute('aria-label',on?'Прибрати з обраного':'Додати в обране');} toast(k<0?'Додано в обране':'Прибрано з обраного'); },
-  quitQuiz:()=>{ if(!Z) return go('home');
-    if(Z.mode==='exam') confirmSheet('Вийти з іспиту?','Результат цього іспиту не зарахується. Уже дані відповіді залишаться в статистиці.','Вийти',()=>go('home'));
-    else go('home'); },
+  quitQuiz:()=>{ if(!Z) return go('home'); const back=Z.off?'off':'home';
+    if(Z.mode==='exam') confirmSheet('Вийти з іспиту?','Результат цього іспиту не зарахується. Уже дані відповіді залишаться в статистиці.','Вийти',()=>go(back));
+    else go(back); },
   car:a=>tapCar(+a),
   gNext:()=>gNext(),
   reset:()=>confirmSheet('Скинути весь прогрес?','Зникнуть відповіді, XP, серія днів, рекорди й досягнення. Це не можна скасувати.','Скинути',()=>{const snd=S.sound;S=defaults();S.sound=snd;save();go('home');toast('Прогрес скинуто');})
