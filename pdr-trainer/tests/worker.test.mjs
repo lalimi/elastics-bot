@@ -98,6 +98,30 @@ test('webhook: файл від користувача запам’ятовує�
   assert.equal(sent.at(-1).body.text, 'Файл отримано: q.pdf (3.0 МБ).');
 });
 
+test('webhook: на файл понад 20 МБ бот дає кнопку сторінки завантаження', async () => {
+  const env = makeEnv(); sent = [];
+  const big = { update_id: 3, message: { message_id: 3, from: { id: OWNER }, chat: { id: OWNER, type: 'private' }, document: { file_id: 'F2', file_name: 'big.pdf', file_size: 41 * 1048576 } } };
+  await worker.fetch(post('/webhook', big, { 'X-Telegram-Bot-Api-Secret-Token': 'whsec' }), env);
+  assert.match(sent.at(-1).body.text, /завеликий/);
+  assert.equal(sent.at(-1).body.reply_markup.inline_keyboard[0][0].web_app.url, 'https://app.test/upload.html');
+});
+
+test('upload: частини лише від дозволених, з перевіркою розміру; остання частина записує опис файлу', async () => {
+  const env = makeEnv();
+  const up = (initData, part, parts, bytes, extra = {}) => worker.fetch(new Request('https://app.test/api/upload', {
+    method: 'POST', body: new Uint8Array(bytes).fill(7),
+    headers: { 'X-Init-Data': initData, 'X-Part': String(part), 'X-Parts': String(parts), 'X-Name': encodeURIComponent('питання.pdf'), 'X-Size': '15', ...extra } }), env);
+  assert.equal((await up('', 0, 2, 10)).status, 401);
+  assert.equal((await up(initFor(999), 0, 2, 10)).status, 403);
+  assert.equal((await up(initFor(OWNER), 2, 2, 10)).status, 400);
+  assert.equal((await up(initFor(OWNER), 0, 2, 8 * 1048576 + 1)).status, 413);
+  assert.equal((await up(initFor(OWNER), 0, 2, 10)).status, 200);
+  assert.equal(env.store.get('upload:file'), undefined);
+  assert.equal((await up(initFor(OWNER), 1, 2, 5)).status, 200);
+  assert.equal(env.store.get('upload:part:0').byteLength, 10);
+  assert.deepEqual(JSON.parse(env.store.get('upload:file')), { ...JSON.parse(env.store.get('upload:file')), name: 'питання.pdf', size: 15, parts: 2, from: OWNER });
+});
+
 test('webhook: якщо анімація не надіслалась — привітання текстом', async () => {
   const env = makeEnv(); const calls = [];
   const realFetch = globalThis.fetch;

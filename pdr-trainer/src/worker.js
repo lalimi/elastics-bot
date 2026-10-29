@@ -9,16 +9,20 @@
 // KV:  activity:<id> = {day, streak, at}, reminded:<id> = дата останнього нагадування, origin = адреса застосунку
 //      (activity і reminded без id — ключі з часів, коли користувачка була одна; читаються для першого id)
 //      upload:last = {file_id, file_name, file_size, from, at} — останній файл, надісланий боту (для імпорту матеріалів)
+//      upload:part:<n>, upload:file = {name, size, parts, from, at} — файл, завантажений частинами через /upload.html
 
 import { verifyInitData, kyivNow, reminderText, REMIND_FROM, REMIND_UNTIL } from './lib.js';
 
 const INIT_DATA_MAX_AGE = 48 * 3600;
+const BOT_FILE_LIMIT = 20 * 1024 * 1024;
+const UPLOAD_PART = 8 * 1024 * 1024;
 
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (url.pathname === '/webhook') return req.method === 'POST' ? webhook(req, env, url) : status(405);
     if (url.pathname === '/api/activity') return req.method === 'POST' ? activity(req, env, url) : status(405);
+    if (url.pathname === '/api/upload') return req.method === 'POST' ? upload(req, env) : status(405);
     return env.ASSETS.fetch(req);
   },
   async scheduled(event, env, ctx) {
@@ -85,6 +89,12 @@ async function webhook(req, env, url) {
     const d = msg.document;
     await env.KV.put('upload:last', JSON.stringify({ file_id: d.file_id, file_name: d.file_name || '', file_size: d.file_size || 0, from: msg.from.id, at: Date.now() }));
     const mb = ((d.file_size || 0) / 1048576).toFixed(1);
+    // Bot API віддає боту файли лише до 20 МБ — більші пропонуємо завантажити сторінкою частинами
+    if ((d.file_size || 0) > BOT_FILE_LIMIT) {
+      const app = await appUrl(env, url);
+      await tg(env, 'sendMessage', { chat_id: msg.chat.id, text: `Файл ${d.file_name || 'без назви'} (${mb} МБ) завеликий, щоб бот міг його забрати. Завантаж його кнопкою нижче — сторінка передасть його частинами.`, reply_markup: { inline_keyboard: [[{ text: 'Завантажити файл', web_app: { url: app + 'upload.html' } }]] } });
+      return status(200);
+    }
     await tg(env, 'sendMessage', { chat_id: msg.chat.id, text: `Файл отримано: ${d.file_name || 'без назви'} (${mb} МБ).` });
     return status(200);
   }
@@ -101,6 +111,24 @@ async function webhook(req, env, url) {
     reply_markup: openButton(app)
   });
   return status(200);
+}
+
+// Великий файл частинами (до UPLOAD_PART байт кожна) зі сторінки upload.html; доступ — за initData дозволених користувачів
+async function upload(req, env) {
+  const v = await verifyInitData(req.headers.get('X-Init-Data') || '', env.BOT_TOKEN, INIT_DATA_MAX_AGE);
+  if (!v) return json({ ok: false }, 401);
+  if (!allowedIds(env).includes(String(v.user.id))) return json({ ok: false }, 403);
+  const part = parseInt(req.headers.get('X-Part'), 10), parts = parseInt(req.headers.get('X-Parts'), 10);
+  if (!(part >= 0 && parts > 0 && part < parts && parts <= 50)) return json({ ok: false }, 400);
+  const body = await req.arrayBuffer();
+  if (!body.byteLength || body.byteLength > UPLOAD_PART) return json({ ok: false }, 413);
+  await env.KV.put(`upload:part:${part}`, body, { expirationTtl: 7 * 86400 });
+  if (part === parts - 1) {
+    const name = decodeURIComponent(req.headers.get('X-Name') || '').slice(0, 200);
+    const size = parseInt(req.headers.get('X-Size'), 10) || 0;
+    await env.KV.put('upload:file', JSON.stringify({ name, size, parts, from: v.user.id, at: Date.now() }), { expirationTtl: 7 * 86400 });
+  }
+  return json({ ok: true });
 }
 
 async function activity(req, env, url) {
