@@ -94,8 +94,9 @@ async function open({ tg = false, cloud = null, theme = DARK, sdk = true, storag
   return { page, context, errors };
 }
 
-const correctK = page => page.evaluate(() => Z.order.indexOf(0));
-const wrongK = page => page.evaluate(() => Z.order.findIndex(i => i !== 0));
+// правильний варіант — за офіційним ключем (qq.c), варіанти не перемішуються
+const correctK = page => page.evaluate(() => Z.order.indexOf(Z.list[Z.i].c));
+const wrongK = page => page.evaluate(() => Z.order.findIndex(i => i !== Z.list[Z.i].c));
 async function answer(page, ok) {
   const k = ok ? await correctK(page) : await wrongK(page);
   await page.click(`.opt[data-arg="${k}"]`);
@@ -122,7 +123,10 @@ test('браузер: головна без Telegram і без помилок', 
   assert.match(await page.locator('.hello').textContent(), /^(Доброго ранку|Добрий день|Добрий вечір|Доброї ночі)!$/);
   const total = await page.evaluate(() => QB.length);
   assert.match(await page.locator('[data-act="marathon"] .d').textContent(), new RegExp(`Усі ${total} питань`));
-  assert.equal(await page.locator('[data-act="topics"] .d').textContent(), `${await page.evaluate(() => SEC_LIST.length)} тем`);
+  assert.equal(total, 1762);
+  assert.equal(await page.locator('[data-act="topics"] .d').textContent(), `${await page.evaluate(() => SEC_LIST.length)} розділів`);
+  assert.match(await page.locator('.note.src').textContent(), /з офіційної бази ГСЦ МВС/);
+  assert.equal(await page.locator('[data-act="off"]').count(), 0, 'окремого екрана «Офіційні білети» більше немає');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -136,16 +140,28 @@ test('браузер: застосунок працює, навіть якщо t
   await context.close();
 });
 
-test('сцени: кожна анімована ілюстрація малюється в картці питання', async () => {
+test('офіційна база: варіанти в офіційному порядку, відповідь за ключем, малюнки, обране', async () => {
   const { page, context, errors } = await open();
-  const ids = await page.evaluate(() => Object.keys(SCN.SCENES));
-  assert.ok(ids.length > 100);
-  for (const id of ids) {
-    await page.evaluate(id => startQuiz('train', [QMAP[id]]), id);
-    assert.equal(await page.locator('.qcard .stage.scene svg').count(), 1, id);
-  }
-  await page.evaluate(() => startQuiz('train', [QB.find(x => x.sign)]));
-  assert.equal(await page.locator('.qcard .stage.sign svg').count(), 1);
+  await page.click('[data-act="examIntro"]'); await page.click('[data-act="startExam"]');
+  assert.equal(await page.locator('.qmeta span').nth(1).textContent(), '1 з 20');
+  const ex = await page.evaluate(() => Z.list.map(x => x.s));
+  assert.equal(new Set(await page.evaluate(() => Z.list.map(x => x.id))).size, 20, 'питання не повторюються');
+  assert.ok(Object.values(ex.reduce((m, s) => (m[s] = (m[s] || 0) + 1, m), {})).every(n => n <= 3), 'не більше 3 з розділу');
+  const st = await page.evaluate(() => ({ order: Z.order, n: Z.list[Z.i].o.length, c: Z.list[Z.i].c, s: Z.list[Z.i].s }));
+  assert.deepEqual(st.order, [...Array(st.n).keys()], 'варіанти не перемішані');
+  assert.match(await page.locator('.qcard .tag').textContent(), new RegExp('^' + st.s.replace('.', '\\.') + '\\. '));
+  await page.click(`.opt[data-arg="${st.c}"]`);
+  assert.equal(await page.locator('.feedback b').textContent(), 'Правильно');
+  await page.evaluate(() => go('home'));
+  // питання з малюнком: малюнок реально завантажується; зірочка «в обране» є і тут
+  const id = await page.evaluate(() => QB.find(x => x.img && x.s === '16.2').id);
+  await page.evaluate(id => startQuiz('train', [QMAP[id]]), id);
+  await page.waitForFunction(() => { const im = document.querySelector('.stage.photo img'); return im && im.complete && im.naturalWidth > 0; });
+  await page.click('[data-act="fav"]');
+  assert.deepEqual(await page.evaluate(() => S.fav), [id]);
+  await answer(page, false);
+  assert.equal(await page.locator('.feedback b').textContent(), 'Неправильно');
+  assert.equal(await page.locator('.opt.correct').getAttribute('data-arg'), String(await page.evaluate(() => Z.list[Z.i].c)));
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -153,52 +169,33 @@ test('сцени: кожна анімована ілюстрація малює�
 test('пояснення простими словами: після помилки — одразу, після правильної — на дотик', async () => {
   const { page, context, errors } = await open();
   await page.waitForFunction(() => window.EXPLAIN);
-  const id = await page.evaluate(() => QB.find(x => !x.sign).id);
+  assert.equal(await page.evaluate(() => QB.filter(x => !EXPLAIN[x.id]).length), 0, 'пояснення є до кожного питання');
+  const id = await page.evaluate(() => QB.find(x => x.img).id);
   const [plain, hook] = await page.evaluate(id => EXPLAIN[id], id);
   await page.evaluate(id => startQuiz('train', [QMAP[id], QMAP[id]]), id);
   await answer(page, false);
   assert.equal(await page.locator('.feedback .plain p').textContent(), plain);
   assert.equal(await page.locator('.feedback .hook p').textContent(), hook);
-  assert.match(await page.locator('.feedback .rulestxt').textContent(), /^Як у правилах/);
   await next(page); await answer(page, true);
   assert.equal(await page.locator('.feedback b').textContent(), 'Правильно');
   assert.equal(await page.locator('.feedback .plain').isVisible(), false);
+  assert.equal(await page.locator('.feedback .more summary').textContent(), 'Чому так?');
   await page.click('.feedback .more summary');
   assert.equal(await page.locator('.feedback .plain').isVisible(), true);
   await next(page);
   assert.equal(await page.locator('.wcard .wa.hint').textContent(), '💡 ' + hook);
+  assert.equal(await page.locator('.wcard .wimg').count(), 1);
   assert.deepEqual(errors, []);
   await context.close();
 });
 
-test('офіційні білети ГСЦ: варіанти в офіційному порядку, відповідь за ключем, малюнки, повернення до білетів', async () => {
-  const { page, context, errors } = await open();
-  await page.click('[data-act="off"]');
-  await page.waitForSelector('[data-act="offExam"]');
-  const total = await page.evaluate(() => OFF.list.length);
-  assert.equal(total, 1762);
-  assert.equal(await page.locator('.row[data-act="offTopic"]').count(), await page.evaluate(() => OFF.secs.length));
-  await page.click('[data-act="offExam"]');
-  assert.equal(await page.locator('.qmeta span').nth(1).textContent(), '1 з 20');
-  const st = await page.evaluate(() => ({ off: Z.off, order: Z.order, n: Z.list[Z.i].o.length, c: Z.list[Z.i].c }));
-  assert.equal(st.off, true);
-  assert.deepEqual(st.order, [...Array(st.n).keys()], 'варіанти не перемішані');
-  assert.equal(await page.locator('.qcard .star').count(), 0);
-  await page.click(`.opt[data-arg="${st.c}"]`);
-  assert.equal(await page.locator('.feedback b').textContent(), 'Правильно');
-  await page.evaluate(() => go('off'));
-  // розділ із малюнками: перше питання показує малюнок, він реально завантажується
-  const sec = await page.evaluate(() => OFF.list.find(x => x.img).s);
-  await page.click(`.row[data-arg="${sec}"]`);
-  await page.evaluate(() => { const i = Z.list.findIndex(x => x.img); Z.i = i; Z.order = null; render(); });
-  await page.waitForFunction(() => { const im = document.querySelector('.stage.photo img'); return im && im.complete && im.naturalWidth > 0; });
-  const wrong = await page.evaluate(() => Z.order.findIndex(i => i !== Z.list[Z.i].c));
-  await page.click(`.opt[data-arg="${wrong}"]`);
-  assert.equal(await page.locator('.feedback b').textContent(), 'Неправильно');
-  assert.equal(await page.locator('.opt.correct').getAttribute('data-arg'), String(await page.evaluate(() => Z.list[Z.i].c)));
-  await page.click('[data-act="quitQuiz"]');
-  assert.equal(await page.evaluate(() => view), 'off', 'вихід з офіційного — до білетів ГСЦ');
-  assert.ok(await page.evaluate(() => Object.keys(S.q).some(id => /^o/.test(id))));
+test('перехід зі старої версії: статистика власних питань прибирається, марафон — з початку', async () => {
+  const old = { v: 1, xp: 420, streak: 2, last: null, q: { t1: { c: 3, w: 1, s: 1 }, 'o1-1': { c: 1, w: 0, s: 1 } }, fav: ['t1', 'o1-2'], marathon: 300, exams: { taken: 4, passed: 2, perfect: 0, fast: 0, best: 19 }, total: { a: 50, c: 40 }, updatedAt: 5 };
+  const { page, context, errors } = await open({ storage: { 'zh-pdr-v1': JSON.stringify(old) } });
+  const st = await page.evaluate(() => ({ q: Object.keys(S.q), fav: S.fav, marathon: S.marathon, xp: S.xp, exams: S.exams.passed, v: S.v }));
+  assert.deepEqual(st, { q: ['o1-1'], fav: ['o1-2'], marathon: 0, xp: 420, exams: 2, v: 2 });
+  assert.match(await page.locator('[data-act="marathon"] .d').textContent(), /^Усі 1762 питань/);
+  assert.equal(await page.locator('[data-act="favs"] .d').textContent(), '1 питання');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -262,12 +259,13 @@ test('розділи: кожен розділ має питання, один п
   const rows = await page.locator('.row small').allTextContents();
   assert.equal(rows.length, await page.evaluate(() => SEC_LIST.length));
   rows.forEach(t => assert.doesNotMatch(t, /^0 /, 'порожній розділ'));
-  const n = await page.evaluate(() => BYSEC.bikes.length);
-  await page.click('.row[data-arg="bikes"]');
+  const n = await page.evaluate(() => BYSEC['22'].length);
+  await page.click('.row[data-arg="22"]');
+  assert.equal(await page.locator('.qmeta span').first().textContent(), 'Розділ 22');
   for (let i = 0; i < n; i++) { await answer(page, true); await next(page); }
   assert.equal(await page.locator('.plate-t').textContent(), `${n} з ${n}`);
   await page.click('.qtop [data-act="home"]'); await page.click('[data-act="topics"]');
-  assert.equal(await page.locator('.row[data-arg="bikes"] .pct').textContent(), '50%');
+  assert.equal(await page.locator('.row[data-arg="22"] .pct').textContent(), '50%');
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -428,11 +426,12 @@ test('Telegram: CloudStorage — ліміти, запис лише змінен�
   await a.page.click('[data-act="train"]'); await answer(a.page, true);
   await sleep(2500);
   assert.ok(cloud.data.has('zh_meta'));
-  const sec = await a.page.evaluate(() => Z.list[Z.i].s);
+  const sec = await a.page.evaluate(() => secOf(Z.list[Z.i].id));
+  assert.match(sec, /^\d+(_\d)?$/);
   assert.ok(cloud.data.has('zh_q_' + sec));
   // друга відповідь — пишуться лише ключ розділу і zh_meta
   await next(a.page);
-  const sec2 = await a.page.evaluate(() => Z.list[Z.i].s);
+  const sec2 = await a.page.evaluate(() => secOf(Z.list[Z.i].id));
   const before = cloud.calls.length;
   await answer(a.page, false); await sleep(2500);
   const writes = cloud.calls.slice(before).filter(c => c.startsWith('saveStorageValue'));

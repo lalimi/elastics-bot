@@ -1,81 +1,50 @@
-// Перевірка бази питань перед деплоєм: формат, унікальні id, розділи, малюнки знаків, сцени до питань,
-// пояснення простими словами (public/js/explain.js).
+// Перевірка бази перед деплоєм: офіційні питання ГСЦ (public/js/official.js) — формат, унікальність,
+// правильна відповідь серед варіантів, малюнки на місці; пояснення простими словами (public/js/explain.js) —
+// є для кожного питання, без нових чисел і посилань на пункти.
 // node scripts/check-questions.mjs
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const EXPECTED = 850;
-const file = new URL('../public/js/questions.js', import.meta.url);
-const { SEC_LIST, QB } = vm.runInNewContext(fs.readFileSync(file, 'utf8') + '\n;({SEC_LIST,QB})');
-const noMotion = () => ({ matches: false });
-const ctx = { window: {} };
-vm.runInNewContext(fs.readFileSync(new URL('../public/js/explain.js', import.meta.url), 'utf8'), ctx);
-const EXPLAIN = ctx.window.EXPLAIN || {};
-const { SCN } = vm.runInNewContext(fs.readFileSync(new URL('../public/js/scenes.js', import.meta.url), 'utf8') + '\n;({SCN})', { window: { matchMedia: noMotion }, matchMedia: noMotion });
-
-const NS = [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 130];
-const SIGNS = new Set(['giveway', 'stop', 'main', 'endmain', 'notraffic', 'noentry', 'noright', 'noleft', 'nouturn', 'noovertake', 'endnoovertake', 'endall', 'nostopping', 'noparking', 'straight', 'right', 'left', 'straightright', 'straightleft', 'rightleft', 'keepright', 'keepleft', 'oneway', 'endoneway', 'parking', 'danger', 'crossroads', 'trafficlight', 'rail1', 'railmulti', 'speed40', ...NS.map(n => 'speed' + n), ...NS.map(n => 'endspeed' + n)]);
+const EXPECTED = 1762;
+const load = (name, key) => { const ctx = { window: {} }; vm.runInNewContext(fs.readFileSync(new URL('../public/js/' + name, import.meta.url), 'utf8'), ctx); return ctx.window[key]; };
+const OFF = load('official.js', 'OFFICIAL');
+const EXPLAIN = load('explain.js', 'EXPLAIN') || {};
 
 const errors = [];
-const secs = new Set(SEC_LIST.map(s => s.id));
-const ids = new Set(), texts = new Map(), count = {};
-for (const x of QB) {
-  const at = x.id;
-  if (ids.has(x.id)) errors.push(`${at}: повтор id`); ids.add(x.id);
-  if (!secs.has(x.s)) errors.push(`${at}: невідомий розділ ${x.s}`);
-  count[x.s] = (count[x.s] || 0) + 1;
-  if (!x.q || !x.q.trim()) errors.push(`${at}: порожнє питання`);
-  if (!Array.isArray(x.o) || x.o.length < 2 || x.o.length > 4) errors.push(`${at}: має бути 2–4 варіанти`);
-  else if (new Set(x.o.map(o => o.trim().toLowerCase())).size !== x.o.length) errors.push(`${at}: однакові варіанти`);
-  if (!x.e || !x.e.trim()) errors.push(`${at}: немає пояснення`);
-  if (x.sign && !SIGNS.has(x.sign)) errors.push(`${at}: немає малюнка для знака ${x.sign}`);
-  const key = x.q.trim().toLowerCase() + '|' + (x.sign || '') + '|' + x.o[0].trim().toLowerCase();
-  if (texts.has(key)) errors.push(`${at}: дублює ${texts.get(key)}`); texts.set(key, x.id);
-}
-SEC_LIST.forEach(s => { if (!count[s.id]) errors.push(`розділ ${s.id} порожній`); });
-const byId = new Map(QB.map(x => [x.id, x]));
-// пояснення простими словами: є для кожного питання, без нових чисел і посилань на пункти
-const nums = t => (t.match(/\d+(?:[.,]\d+)?/g) || []).map(d => d.replace(',', '.'));
-for (const x of QB) {
-  const p = EXPLAIN[x.id];
-  if (!Array.isArray(p) || p.length !== 2 || !p.every(t => typeof t === 'string' && t.trim())) { errors.push(`${x.id}: немає пояснення простими словами`); continue; }
-  const allowed = new Set(nums([x.q, ...x.o, x.e].join(' ')));
-  p.forEach((t, i) => {
-    if (t.length > (i ? 150 : 230)) errors.push(`${x.id}: пояснення простими словами задовге`);
-    if (/\bп\.\s*\d|пункт\s*\d/i.test(t)) errors.push(`${x.id}: у поясненні простими словами посилання на пункт`);
-    nums(t).filter(d => !allowed.has(d)).forEach(d => errors.push(`${x.id}: у поясненні простими словами число ${d}, якого немає в питанні`));
-  });
-}
-Object.keys(EXPLAIN).filter(id => !byId.has(id)).forEach(id => errors.push(`пояснення для неіснуючого питання ${id}`));
-for (const id of Object.keys(SCN.SCENES)) {
-  const x = byId.get(id);
-  if (!x) { errors.push(`сцена ${id}: немає такого питання`); continue; }
-  if (x.sign) errors.push(`сцена ${id}: у питання вже є знак`);
-  const html = SCN.html(id);
-  if (!html.includes('<svg') || /undefined|NaN/.test(html)) errors.push(`сцена ${id}: не малюється`);
-}
-if (QB.length !== EXPECTED) errors.push(`питань ${QB.length}, очікувалось ${EXPECTED}`);
-
-// офіційна база ГСЦ (public/js/official.js): формат, унікальність, правильна відповідь серед варіантів, малюнки на місці
-const octx = { window: {} };
-vm.runInNewContext(fs.readFileSync(new URL('../public/js/official.js', import.meta.url), 'utf8'), octx);
-const OFF = octx.window.OFFICIAL;
-const OFF_EXPECTED = 1762;
-const oseen = new Set(), osecs = new Set(OFF.secs.map(x => x[0])), ocount = {};
+const idOf = (s, n) => 'o' + s.replace('.', '_') + '-' + n;
+const seen = new Set(), secs = new Set(OFF.secs.map(x => x[0])), count = {};
 for (const [s, n, q, o, c, img] of OFF.q) {
   const at = `ГСЦ ${s}/${n}`;
-  if (oseen.has(s + '/' + n)) errors.push(`${at}: повтор`); oseen.add(s + '/' + n);
-  if (!osecs.has(s)) errors.push(`${at}: невідомий розділ`);
-  ocount[s] = (ocount[s] || 0) + 1;
+  if (seen.has(idOf(s, n))) errors.push(`${at}: повтор`); seen.add(idOf(s, n));
+  if (!secs.has(s)) errors.push(`${at}: невідомий розділ`);
+  count[s] = (count[s] || 0) + 1;
   if (!q || !q.trim()) errors.push(`${at}: порожнє питання`);
   if (!Array.isArray(o) || o.length < 2 || o.some(x => !x || !x.trim())) errors.push(`${at}: погані варіанти`);
   if (!(Number.isInteger(c) && c >= 0 && c < o.length)) errors.push(`${at}: правильна відповідь поза варіантами`);
   if (img && !fs.existsSync(new URL('../public/off/' + img, import.meta.url))) errors.push(`${at}: немає малюнка ${img}`);
 }
-OFF.secs.forEach(([s]) => { const ns = OFF.q.filter(x => x[0] === s).map(x => x[1]); if (ns.some((n, i) => n !== i + 1)) errors.push(`ГСЦ розділ ${s}: нумерація з пропусками`); });
-if (OFF.q.length !== OFF_EXPECTED) errors.push(`офіційних питань ${OFF.q.length}, очікувалось ${OFF_EXPECTED}`);
+OFF.secs.forEach(([s]) => {
+  const ns = OFF.q.filter(x => x[0] === s).map(x => x[1]);
+  if (!ns.length) errors.push(`ГСЦ розділ ${s} порожній`);
+  if (ns.some((n, i) => n !== i + 1)) errors.push(`ГСЦ розділ ${s}: нумерація з пропусками`);
+});
+if (OFF.q.length !== EXPECTED) errors.push(`офіційних питань ${OFF.q.length}, очікувалось ${EXPECTED}`);
 
-console.log(`Питань: ${QB.length}, розділів: ${SEC_LIST.length}, сцен: ${Object.keys(SCN.SCENES).length}; офіційних ГСЦ: ${OFF.q.length} у ${OFF.secs.length} розділах, з малюнками ${OFF.q.filter(x => x[5]).length}`);
-console.log(SEC_LIST.map(s => `  ${s.sh}: ${count[s.id] || 0}`).join('\n'));
-if (errors.length) { console.error('\nПомилки:\n' + errors.map(e => '  ' + e).join('\n')); process.exit(1); }
+// пояснення: [простими словами, як запам'ятати]; кожне число має бути в тексті питання чи варіантів
+const nums = t => (t.match(/\d+(?:[.,]\d+)?/g) || []).map(d => d.replace(',', '.'));
+for (const [s, n, q, o] of OFF.q) {
+  const id = idOf(s, n), p = EXPLAIN[id];
+  if (!Array.isArray(p) || p.length !== 2 || !p.every(t => typeof t === 'string' && t.trim())) { errors.push(`${id}: немає пояснення простими словами`); continue; }
+  const allowed = new Set(nums([q, ...o].join(' ')));
+  p.forEach((t, i) => {
+    if (t.length > (i ? 150 : 260)) errors.push(`${id}: пояснення задовге`);
+    if (/\bп\.\s*\d|пункт\w*\s*\d|ст\.\s*\d|стат\w*\s*\d/i.test(t)) errors.push(`${id}: у поясненні посилання на пункт чи статтю`);
+    if (/[<>]/.test(t)) errors.push(`${id}: у поясненні символи < >`);
+    nums(t).filter(d => !allowed.has(d)).forEach(d => errors.push(`${id}: у поясненні число ${d}, якого немає в питанні`));
+  });
+}
+Object.keys(EXPLAIN).filter(id => !seen.has(id)).forEach(id => errors.push(`пояснення для неіснуючого питання ${id}`));
+
+console.log(`Офіційних питань ГСЦ: ${OFF.q.length} у ${OFF.secs.length} розділах, з малюнками ${OFF.q.filter(x => x[5]).length}; пояснень: ${Object.keys(EXPLAIN).length}`);
+if (errors.length) { console.error('\nПомилки:\n' + errors.slice(0, 60).map(e => '  ' + e).join('\n') + (errors.length > 60 ? `\n  …і ще ${errors.length - 60}` : '')); process.exit(1); }
 console.log('OK');

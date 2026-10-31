@@ -29,8 +29,8 @@ await call('setWebhook', {
   drop_pending_updates: true
 });
 await call('setMyCommands', { commands: [{ command: 'start', description: 'Відкрити тренажер' }] });
-await call('setMyDescription', { description: '«Зелена хвиля» — особистий тренажер ПДР України: 850 питань за чинними правилами, пробний іспит на 20 хвилин, анімовані схеми до питань, гра на перехрестях і нагадування щовечора.' });
-await call('setMyShortDescription', { short_description: 'Тренажер ПДР: 850 питань, пробний іспит і анімовані схеми 🚦' });
+await call('setMyDescription', { description: '«Зелена хвиля» — особистий тренажер ПДР України: 1762 офіційні питання ГСЦ МВС для категорії B з малюнками, пробний іспит на 20 хвилин, пояснення простими словами, гра на перехрестях і нагадування щовечора.' });
+await call('setMyShortDescription', { short_description: 'Тренажер ПДР: 1762 офіційні питання ГСЦ, пробний іспит і пояснення 🚦' });
 const menu = { type: 'web_app', text: 'Тренажер', web_app: { url: APP_URL } };
 const ids = String(ALLOWED_USER_ID || '').split(/[\s,]+/).filter(Boolean);
 if (ids.length) for (const id of ids) await call('setChatMenuButton', { chat_id: Number(id), menu_button: menu });
